@@ -1,0 +1,15 @@
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\bin\Debug\net6.0\Spec1.exe
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\bin\Debug\net6.0\Spec1.deps.json
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\bin\Debug\net6.0\Spec1.runtimeconfig.json
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\bin\Debug\net6.0\Spec1.dll
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\bin\Debug\net6.0\Spec1.pdb
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.csproj.AssemblyReference.cache
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.AssemblyInfoInputs.cache
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.AssemblyInfo.cs
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.csproj.CoreCompileInputs.cache
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.dll
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\refint\Spec1.dll
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.pdb
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\Spec1.genruntimeconfig.cache
+C:\Users\Tema\Desktop\gitstady\Specialization\Spec1\obj\Debug\net6.0\ref\Spec1.dll
