@@ -3,6 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/history/presentation/screens/history_screen.dart';
+import '../../features/onboarding/presentation/screens/onboarding_birthdate_screen.dart';
+import '../../features/onboarding/presentation/screens/onboarding_disclaimer_screen.dart';
+import '../../features/onboarding/presentation/screens/onboarding_notifications_screen.dart';
+import '../../features/onboarding/presentation/screens/onboarding_welcome_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/subscription/presentation/screens/paywall_screen.dart';
+import '../../features/today/presentation/screens/today_screen.dart';
+import '../providers/core_providers.dart';
+import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
+
 part 'app_router.g.dart';
 
 // ============================================================
@@ -14,27 +26,15 @@ class AppRoutes {
   static const String splash = '/';
   static const String onboarding = '/onboarding';
   static const String onboardingBirthdate = '/onboarding/birthdate';
-  static const String onboardingPersonalization = '/onboarding/personalization';
   static const String onboardingDisclaimer = '/onboarding/disclaimer';
   static const String onboardingNotifications = '/onboarding/notifications';
 
-  static const String home = '/home';
   static const String today = '/home/today';
   static const String tarotDraw = '/home/tarot/draw';
-  static const String tarotCard = '/home/tarot/card/:cardId';
   static const String history = '/home/history';
-  static const String historyDetail = '/home/history/:date';
   static const String settings = '/home/settings';
-  static const String profile = '/home/settings/profile';
-  static const String notifications = '/home/settings/notifications';
-  static const String language = '/home/settings/language';
-  static const String theme = '/home/settings/theme';
 
-  static const String subscription = '/subscription';
   static const String paywall = '/paywall';
-
-  static const String tarotLibrary = '/tarot/library';
-  static const String zodiacInfo = '/zodiac/:sign';
 }
 
 // ============================================================
@@ -42,270 +42,269 @@ class AppRoutes {
 // ============================================================
 @riverpod
 GoRouter appRouter(AppRouterRef ref) {
-  // TODO: Watch auth state to redirect
-  // final authState = ref.watch(authStateProvider);
-  // final onboardingComplete = ref.watch(onboardingCompleteProvider);
+  // Watch auth + profile so GoRouter rebuilds on change → redirect fires.
+  final authAsync = ref.watch(authStateProvider);
+  final profileAsync = ref.watch(userProfileProvider);
 
   return GoRouter(
     initialLocation: AppRoutes.splash,
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: false,
     routes: [
-      // Splash
+      // ── Splash ──────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.splash,
-        pageBuilder: (context, state) => _buildPage(
-          state: state,
-          child: const SplashScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPage(state: state, child: const SplashScreen()),
       ),
 
-      // Onboarding flow
+      // ── Onboarding flow ─────────────────────────────────────
       GoRoute(
         path: AppRoutes.onboarding,
-        pageBuilder: (context, state) => _buildPage(
-          state: state,
-          child: const OnboardingWelcomeScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPage(state: state, child: const OnboardingWelcomeScreen()),
         routes: [
           GoRoute(
             path: 'birthdate',
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const OnboardingBirthdateScreen(),
-            ),
-          ),
-          GoRoute(
-            path: 'personalization',
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const OnboardingPersonalizationScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const OnboardingBirthdateScreen()),
           ),
           GoRoute(
             path: 'disclaimer',
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const OnboardingDisclaimerScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const OnboardingDisclaimerScreen()),
           ),
           GoRoute(
             path: 'notifications',
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const OnboardingNotificationsScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const OnboardingNotificationsScreen()),
           ),
         ],
       ),
 
-      // Main app shell
+      // ── Main app shell with bottom navigation ────────────────
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(
             path: AppRoutes.today,
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const TodayScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const TodayScreen()),
           ),
           GoRoute(
             path: AppRoutes.history,
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const HistoryScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const HistoryScreen()),
           ),
           GoRoute(
             path: AppRoutes.settings,
-            pageBuilder: (context, state) => _buildPage(
-              state: state,
-              child: const SettingsScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                _buildPage(state: state, child: const SettingsScreen()),
           ),
         ],
       ),
 
-      // Standalone screens (no shell)
+      // ── Standalone screens (no shell) ────────────────────────
       GoRoute(
         path: AppRoutes.paywall,
-        pageBuilder: (context, state) => _buildModalPage(
-          state: state,
-          child: const PaywallScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildModalPage(state: state, child: const PaywallScreen()),
       ),
       GoRoute(
         path: AppRoutes.tarotDraw,
-        pageBuilder: (context, state) => _buildPage(
-          state: state,
-          child: const TarotDrawScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPage(state: state, child: const TarotDrawScreen()),
       ),
     ],
 
-    // Global error handler
-    errorPageBuilder: (context, state) => MaterialPage(
-      child: ErrorScreen(error: state.error),
-    ),
+    errorPageBuilder: (context, state) =>
+        MaterialPage(child: ErrorScreen(error: state.error)),
 
-    // Redirect logic
+    // ── Auth-aware redirect logic ────────────────────────────────────────
+    //
+    // State machine:
+    //   loading           → stay on splash (shows spinner)
+    //   not onboarded     → /onboarding
+    //   onboarded         → redirect splash/onboarding → /home/today
     redirect: (context, state) {
-      // TODO: Implement auth + onboarding redirect logic
-      // if (!authState.isLoggedIn) return AppRoutes.onboarding;
-      // if (!onboardingComplete) return AppRoutes.onboarding;
+      final loading = authAsync.isLoading || profileAsync.isLoading;
+      final loc = state.matchedLocation;
+
+      if (loading) {
+        return loc == AppRoutes.splash ? null : AppRoutes.splash;
+      }
+
+      final onSplash = loc == AppRoutes.splash;
+      final onOnboarding = loc.startsWith('/onboarding');
+      final isOnboardingDone =
+          profileAsync.valueOrNull?.hasCompletedOnboarding ?? false;
+
+      if (!isOnboardingDone) {
+        if (!onOnboarding && !onSplash) return AppRoutes.onboarding;
+        return null;
+      }
+
+      // Onboarding done — bounce away from splash/onboarding
+      if (onSplash || onOnboarding) return AppRoutes.today;
       return null;
     },
   );
 }
 
 // ============================================================
-// PAGE BUILDERS
+// PAGE TRANSITION BUILDERS
 // ============================================================
 CustomTransitionPage<void> _buildPage({
   required GoRouterState state,
   required Widget child,
-}) {
-  return CustomTransitionPage<void>(
-    key: state.pageKey,
-    child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(
-        opacity: animation,
-        child: child,
-      );
-    },
-    transitionDuration: const Duration(milliseconds: 300),
-  );
-}
+}) =>
+    CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionsBuilder: (_, animation, __, child) =>
+          FadeTransition(opacity: animation, child: child),
+      transitionDuration: const Duration(milliseconds: 300),
+    );
 
 CustomTransitionPage<void> _buildModalPage({
   required GoRouterState state,
   required Widget child,
-}) {
-  return CustomTransitionPage<void>(
-    key: state.pageKey,
-    child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      const begin = Offset(0.0, 1.0);
-      const end = Offset.zero;
-      const curve = Curves.easeOutCubic;
-      final tween = Tween(begin: begin, end: end)
-          .chain(CurveTween(curve: curve));
-      return SlideTransition(
-        position: animation.drive(tween),
-        child: child,
-      );
-    },
-    transitionDuration: const Duration(milliseconds: 400),
-  );
-}
+}) =>
+    CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionsBuilder: (_, animation, __, child) {
+        final tween = Tween(begin: const Offset(0, 1), end: Offset.zero)
+            .chain(CurveTween(curve: Curves.easeOutCubic));
+        return SlideTransition(position: animation.drive(tween), child: child);
+      },
+      transitionDuration: const Duration(milliseconds: 400),
+    );
 
 // ============================================================
-// THEME MODE PROVIDER (used by main.dart)
+// THEME MODE PROVIDER
 // ============================================================
 @riverpod
 ThemeMode themeMode(ThemeModeRef ref) {
-  // TODO: Load from user settings
-  return ThemeMode.dark; // Default: dark cosmic theme
+  final mode = ref.watch(appThemeModeProvider);
+  return switch (mode) {
+    'light' => ThemeMode.light,
+    'system' => ThemeMode.system,
+    _ => ThemeMode.dark,
+  };
 }
 
 // ============================================================
-// PLACEHOLDER SCREENS (will be replaced in Stage 3)
+// SPLASH SCREEN — fires anonymous sign-in, then router redirects
 // ============================================================
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends ConsumerState<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _signIn();
+  }
+
+  Future<void> _signIn() async {
+    try {
+      await ref.read(authServiceProvider).signInAnonymously();
+    } catch (_) {
+      // Offline — local_user_fallback used automatically by AuthService
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
+      backgroundColor: AppTheme.midnightBlue,
       body: Center(
-        child: Text('Mystic Tarot', style: TextStyle(fontSize: 32)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('✦',
+                style: TextStyle(fontSize: 80, color: AppTheme.celestialGold)),
+            const SizedBox(height: 24),
+            Text(
+              'ASTRALUME',
+              style: Theme.of(context)
+                  .textTheme
+                  .displayLarge
+                  ?.copyWith(fontSize: 36, letterSpacing: 6),
+            ),
+            const SizedBox(height: 56),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppTheme.celestialGold),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class OnboardingWelcomeScreen extends StatelessWidget {
-  const OnboardingWelcomeScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Onboarding — Welcome')),
-      );
-}
-
-class OnboardingBirthdateScreen extends StatelessWidget {
-  const OnboardingBirthdateScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Onboarding — Birth Date')),
-      );
-}
-
-class OnboardingPersonalizationScreen extends StatelessWidget {
-  const OnboardingPersonalizationScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Onboarding — Personalization')),
-      );
-}
-
-class OnboardingDisclaimerScreen extends StatelessWidget {
-  const OnboardingDisclaimerScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Onboarding — Disclaimer ⚠️')),
-      );
-}
-
-class OnboardingNotificationsScreen extends StatelessWidget {
-  const OnboardingNotificationsScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Onboarding — Notifications')),
-      );
-}
-
+// ============================================================
+// MAIN SHELL — bottom navigation
+// ============================================================
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.child});
   final Widget child;
+
+  static const _tabs = [
+    (AppRoutes.today, Icons.auto_awesome_outlined, Icons.auto_awesome, 'Today'),
+    (AppRoutes.history, Icons.history_outlined, Icons.history, 'History'),
+    (AppRoutes.settings, Icons.settings_outlined, Icons.settings, 'Settings'),
+  ];
+
   @override
-  Widget build(BuildContext context) => Scaffold(body: child);
+  Widget build(BuildContext context) {
+    final loc = GoRouterState.of(context).matchedLocation;
+    int idx = 0;
+    for (int i = 0; i < _tabs.length; i++) {
+      if (loc.startsWith(_tabs[i].$1)) {
+        idx = i;
+        break;
+      }
+    }
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: idx,
+        backgroundColor: AppTheme.cosmicPurple,
+        indicatorColor: AppTheme.royalPurple,
+        onDestinationSelected: (i) => context.go(_tabs[i].$1),
+        destinations: _tabs
+            .map((t) => NavigationDestination(
+                  icon: Icon(t.$2, color: AppTheme.textSecondary),
+                  selectedIcon: Icon(t.$3, color: AppTheme.celestialGold),
+                  label: t.$4,
+                ))
+            .toList(),
+      ),
+    );
+  }
 }
 
-class TodayScreen extends StatelessWidget {
-  const TodayScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: Text('Today — Horoscope & Tarot')),
-      );
-}
-
-class HistoryScreen extends StatelessWidget {
-  const HistoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('History')));
-}
-
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Settings')));
-}
-
-class PaywallScreen extends StatelessWidget {
-  const PaywallScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Paywall — Premium')));
-}
-
+// ============================================================
+// PLACEHOLDER SCREENS (elaborated in Stage 4)
+// ============================================================
 class TarotDrawScreen extends StatelessWidget {
   const TarotDrawScreen({super.key});
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Tarot Draw')));
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: AppTheme.midnightBlue,
+        appBar: AppBar(
+            backgroundColor: Colors.transparent, title: const Text('Tarot')),
+        body: const Center(child: Text('Tarot Draw — Stage 4')),
+      );
 }
 
 class ErrorScreen extends StatelessWidget {
@@ -313,6 +312,33 @@ class ErrorScreen extends StatelessWidget {
   final Exception? error;
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: Center(child: Text('Error: $error')),
+        backgroundColor: AppTheme.midnightBlue,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline,
+                  color: AppTheme.error, size: 64),
+              const SizedBox(height: 16),
+              Text('Something went wrong',
+                  style: Theme.of(context).textTheme.titleLarge),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(error.toString(),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppTheme.textSecondary),
+                      textAlign: TextAlign.center),
+                ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => context.go(AppRoutes.today),
+                child: const Text('Go Home'),
+              ),
+            ],
+          ),
+        ),
       );
 }

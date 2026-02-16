@@ -3,20 +3,27 @@ import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../domain/entities/subscription_status.dart';
 import '../../domain/repositories/subscription_repository.dart';
+import '../datasources/subscription_remote_datasource.dart';
 
 /// Offline-first implementation of [SubscriptionRepository].
 ///
-/// SECURITY: This class reads subscription status from local cache.
-/// The cache is populated ONLY from Firestore (written by Cloud Functions).
-/// The client NEVER writes subscription status directly.
+/// SECURITY: This class reads subscription status from local cache only.
+/// The cache is populated from Firestore (written exclusively by Cloud Functions).
+/// The client NEVER writes subscription status directly — enforced by Firestore Rules.
 ///
-/// Stage 2: Local cache only, always returns free status if no cache.
-/// Stage 3: Firestore stream listener added, real-time subscription updates.
+/// Cache strategy: Firestore stream populates local Drift cache in background.
+/// On cold start, returns local cache immediately while stream reconnects.
+///
+/// Stage 2: Local cache only, returns free status if no cache.
+/// Stage 3: Firestore stream → local cache sync (this implementation).
 /// Stage 4: Google Play Billing integration.
 class SubscriptionRepositoryImpl implements SubscriptionRepository {
-  SubscriptionRepositoryImpl(this._db);
+  SubscriptionRepositoryImpl(this._db, {this.remote});
 
   final AppDatabase _db;
+
+  /// Remote datasource. Null in offline mode (no Firebase).
+  final SubscriptionRemoteDatasource? remote;
 
   @override
   Future<SubscriptionStatus> getStatus(String userId) async {
@@ -35,16 +42,67 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
 
   @override
   Stream<SubscriptionStatus> watchStatus(String userId) {
+    // Start background Firestore → cache sync.
+    _startRemoteSync(userId);
+
+    // Return local cache stream (instant, works offline).
     return (_db.select(_db.subscriptionCacheTable)
       ..where((t) => t.userId.equals(userId)))
         .watchSingleOrNull()
         .map((row) => row != null ? _rowToEntity(row) : SubscriptionStatus.free(userId));
   }
 
+  /// Syncs Firestore subscription document to local Drift cache.
+  /// Called once per stream subscription; idempotent if called multiple times.
+  void _startRemoteSync(String userId) {
+    final datasource = remote;
+    if (datasource == null) return; // Offline mode — skip
+
+    datasource.watchStatus(userId).listen(
+      (data) async {
+        if (data == null) return; // No Firestore doc → user is on free tier
+        final now = DateTime.now();
+        await _db.into(_db.subscriptionCacheTable).insertOnConflictUpdate(
+          SubscriptionCacheTableCompanion.insert(
+            userId: userId,
+            state: Value(data['subscriptionState'] as String? ?? 'free'),
+            productId: Value(data['productId'] as String?),
+            expiresAt: Value(
+              data['expiresAt'] != null
+                  ? (data['expiresAt'] as dynamic).toDate() as DateTime
+                  : null,
+            ),
+            lastSyncedAt: now,
+            cacheValidUntil: now.add(const Duration(hours: 24)),
+          ),
+        );
+      },
+      onError: (_) {
+        // Firestore unavailable — local cache remains valid
+      },
+    );
+  }
+
   @override
-  Future<SubscriptionStatus> refresh(String userId) {
-    // TODO(stage3): Fetch from Firestore and update local cache
-    // For now, return current cached value
+  Future<SubscriptionStatus> refresh(String userId) async {
+    final data = await remote?.fetchStatus(userId);
+    if (data == null) return getStatus(userId);
+
+    final now = DateTime.now();
+    await _db.into(_db.subscriptionCacheTable).insertOnConflictUpdate(
+      SubscriptionCacheTableCompanion.insert(
+        userId: userId,
+        state: Value(data['subscriptionState'] as String? ?? 'free'),
+        productId: Value(data['productId'] as String?),
+        expiresAt: Value(
+          data['expiresAt'] != null
+              ? (data['expiresAt'] as dynamic).toDate() as DateTime
+              : null,
+        ),
+        lastSyncedAt: now,
+        cacheValidUntil: now.add(const Duration(hours: 24)),
+      ),
+    );
     return getStatus(userId);
   }
 

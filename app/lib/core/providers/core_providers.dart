@@ -1,12 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/app_database.dart';
+import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../../features/onboarding/data/repositories/user_profile_repository_impl.dart';
 import '../../features/onboarding/domain/entities/user_profile.dart';
 import '../../features/onboarding/domain/repositories/user_profile_repository.dart';
+import '../../features/subscription/data/datasources/subscription_remote_datasource.dart';
 import '../../features/subscription/data/repositories/subscription_repository_impl.dart';
 import '../../features/subscription/domain/entities/subscription_status.dart';
 import '../../features/subscription/domain/repositories/subscription_repository.dart';
+import '../../features/today/data/datasources/horoscope_remote_datasource.dart';
 import '../../features/today/data/repositories/horoscope_repository_impl.dart';
 import '../../features/today/domain/entities/daily_reading.dart';
 import '../../features/today/domain/repositories/horoscope_repository.dart';
@@ -32,11 +36,17 @@ final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
 });
 
 final horoscopeRepositoryProvider = Provider<HoroscopeRepository>((ref) {
-  return HoroscopeRepositoryImpl(ref.watch(appDatabaseProvider));
+  return HoroscopeRepositoryImpl(
+    ref.watch(appDatabaseProvider),
+    remote: ref.watch(horoscopeRemoteDatasourceProvider),
+  );
 });
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
-  return SubscriptionRepositoryImpl(ref.watch(appDatabaseProvider));
+  return SubscriptionRepositoryImpl(
+    ref.watch(appDatabaseProvider),
+    remote: ref.watch(subscriptionRemoteDatasourceProvider),
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════

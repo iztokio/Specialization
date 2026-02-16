@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
 
 /// Onboarding Welcome Screen — первый экран после установки.
@@ -36,7 +38,7 @@ class OnboardingWelcomeScreen extends ConsumerWidget {
 
                 // App name
                 const Text(
-                  '✦ ASTRAVIA ✦',
+                  '✦ ASTRALUME ✦',
                   style: TextStyle(
                     fontFamily: 'CinzelDecorative',
                     fontSize: 32,
@@ -93,22 +95,12 @@ class OnboardingWelcomeScreen extends ConsumerWidget {
   }
 
   void _onGetStarted(BuildContext context) {
-    // TODO(stage3): GoRouter.of(context).push('/onboarding/birthdate')
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const _BirthdatePlaceholder(),
-      ),
-    );
+    context.push(AppRoutes.onboardingBirthdate);
   }
 
   void _onSignIn(BuildContext context) {
-    // TODO(stage3): Firebase Auth sign in
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sign in — coming in Stage 3'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    // Anonymous auth is automatic — "sign in" is a no-op for entertainment app
+    context.push(AppRoutes.onboardingBirthdate);
   }
 }
 
@@ -295,17 +287,3 @@ class _DisclaimerFooter extends StatelessWidget {
   }
 }
 
-// Temporary placeholder — will be replaced with GoRouter in Stage 3
-class _BirthdatePlaceholder extends StatelessWidget {
-  const _BirthdatePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Birth Date')),
-      body: const Center(
-        child: Text('Birth Date Screen — Stage 3'),
-      ),
-    );
-  }
-}

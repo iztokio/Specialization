@@ -5,20 +5,27 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/database/app_database.dart';
 import '../../domain/entities/daily_reading.dart';
 import '../../domain/repositories/horoscope_repository.dart';
+import '../datasources/horoscope_remote_datasource.dart';
 
 /// Offline-first implementation of [HoroscopeRepository].
 ///
-/// Stage 2: Cache-first with placeholder content.
-/// Stage 3: Firestore remote datasource added.
+/// Stage 3: Cache-first with Firestore background fetch.
 ///
 /// Cache strategy:
-/// - Valid for 24h after [cachedAt]
-/// - Background refresh when content_version from Remote Config changes
-/// - Deterministic seed: same date + sign = same reading every time
+/// 1. Return local Drift cache immediately if not expired
+/// 2. In background, fetch from Firestore if cache is stale
+/// 3. Populate local cache from Firestore response
+/// 4. Next read gets fresh content from local cache
+///
+/// Fallback: if Firestore unavailable or returns null,
+///           generate deterministic placeholder (same seed = same reading daily).
 class HoroscopeRepositoryImpl implements HoroscopeRepository {
-  HoroscopeRepositoryImpl(this._db);
+  HoroscopeRepositoryImpl(this._db, {this.remote});
 
   final AppDatabase _db;
+
+  /// Remote datasource. Null in offline mode (no Firebase configured).
+  final HoroscopeRemoteDatasource? remote;
 
   @override
   Future<DailyReading> getTodayReading({
@@ -38,15 +45,26 @@ class HoroscopeRepositoryImpl implements HoroscopeRepository {
       if (cached != null) return _rowToEntity(cached);
     }
 
-    // TODO(stage3): Fetch from Firestore remote datasource
-    // For now, generate deterministic placeholder content
-    final reading = _generatePlaceholderReading(
+    // Attempt Firestore fetch
+    final remoteData = await remote?.fetchReading(
       userId: userId,
-      zodiacSign: zodiacSign,
       date: dateOnly,
+      zodiacSign: zodiacSign,
     );
 
-    // Cache locally
+    final DailyReading reading;
+    if (remoteData != null) {
+      reading = _remoteToEntity(userId: userId, date: dateOnly, data: remoteData);
+    } else {
+      // Offline or content not yet generated — deterministic placeholder
+      reading = _generatePlaceholderReading(
+        userId: userId,
+        zodiacSign: zodiacSign,
+        date: dateOnly,
+      );
+    }
+
+    // Cache locally for offline access
     await _db.upsertDailyReading(_entityToCompanion(reading));
     return reading;
   }
@@ -87,7 +105,75 @@ class HoroscopeRepositoryImpl implements HoroscopeRepository {
     await _db.purgeExpiredReadings();
   }
 
-  // ─── Placeholder content (Stage 3: replace with Firestore) ─────────────
+  // ─── Firestore → entity mapping ─────────────────────────────────────────
+
+  DailyReading _remoteToEntity({
+    required String userId,
+    required DateTime date,
+    required Map<String, dynamic> data,
+  }) {
+    final zodiacSign = data['zodiacSign'] as String? ?? 'gemini';
+    final seed = (data['seed'] as int?) ??
+        DailyReading.generateSeed(date, zodiacSign);
+    final cardIndex = (data['cardIndex'] as int?) ?? 0;
+    final isReversed = (data['isReversed'] as bool?) ?? false;
+    final position =
+        isReversed ? TarotPosition.reversed : TarotPosition.upright;
+    final cardName = data['cardName'] as String? ?? 'Card ${cardIndex + 1}';
+    final cardMeaning = data['cardMeaning'] as String? ?? '';
+    final generalText = data['generalText'] as String? ?? '';
+    final loveText = data['loveText'] as String? ?? generalText;
+    final workText = data['workText'] as String? ?? generalText;
+    final wellbeingText = data['wellbeingText'] as String? ?? generalText;
+    final contentVersion =
+        int.tryParse(data['contentVersion'] as String? ?? '0') ?? 0;
+    final language = data['language'] as String? ?? 'en';
+
+    final card = TarotCard(
+      id: 'card_$cardIndex',
+      number: cardIndex,
+      arcana: cardIndex < 22 ? TarotArcana.major : TarotArcana.minor,
+      suit: TarotSuit.none,
+      names: LocalizedText(
+          en: cardName, es: cardName, pt: cardName, ru: cardName),
+      imageUrl: data['cardImageUrl'] as String? ?? '',
+      imageLicense: 'rider_waite_public_domain',
+      imageSource: data['cardImageSource'] as String? ?? '',
+      meanings: TarotMeanings(
+        upright: LocalizedText(
+            en: cardMeaning, es: cardMeaning,
+            pt: cardMeaning, ru: cardMeaning),
+        reversed: LocalizedText(
+            en: cardMeaning, es: cardMeaning,
+            pt: cardMeaning, ru: cardMeaning),
+        love: LocalizedText(
+            en: loveText, es: loveText, pt: loveText, ru: loveText),
+        work: LocalizedText(
+            en: workText, es: workText, pt: workText, ru: workText),
+        health: LocalizedText(
+            en: wellbeingText, es: wellbeingText,
+            pt: wellbeingText, ru: wellbeingText),
+      ),
+      version: contentVersion,
+    );
+
+    return DailyReading(
+      id: DailyReading.makeId(userId, date),
+      uid: userId,
+      date: date,
+      zodiacSign: zodiacSign,
+      horoscope: LocalizedText(
+          en: generalText, es: generalText, pt: generalText, ru: generalText),
+      drawnCards: [DrawnCard(card: card, position: position, spreadPosition: 0)],
+      seed: seed,
+      contentVersion: contentVersion,
+      language: language,
+      isPremium: (data['isPremium'] as bool?) ?? false,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  // ─── Placeholder content (offline fallback) ──────────────────────────────
 
   DailyReading _generatePlaceholderReading({
     required String userId,
