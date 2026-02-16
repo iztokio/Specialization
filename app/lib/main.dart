@@ -1,9 +1,15 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/router/app_router.dart';
+import 'core/theme/app_theme.dart';
+import 'firebase_options.dart';
 
 // ============================================================
 // DISCLAIMER:
@@ -12,89 +18,84 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // financial, legal, or any other professional advice.
 // ============================================================
 
-// NOTE: Firebase init is deferred until `flutterfire configure` is run.
-// See docs/stage0/SETUP-GUIDE.md
+/// Top-level FCM background handler (required by firebase_messaging).
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Background messages handled silently — no UI interaction
+}
 
 void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
       ]);
-      // TODO(stage3): Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-      // TODO(stage3): Crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode)
-      runApp(const ProviderScope(child: AstraLumeApp()));
+
+      // ─── Firebase initialization ────────────────────────────────
+      // Graceful fallback: if firebase_options.dart is placeholder,
+      // the app runs in offline mode (local Drift DB only).
+      bool firebaseReady = false;
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        firebaseReady = true;
+
+        // Crashlytics: only in release mode
+        await FirebaseCrashlytics.instance
+            .setCrashlyticsCollectionEnabled(!kDebugMode);
+
+        // FCM background handler
+        FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler,
+        );
+      } catch (e) {
+        // Firebase not configured yet — run in offline mode
+        if (kDebugMode) {
+          debugPrint(
+            '[AstraLume] Firebase not configured — offline mode active.\n'
+            'Run: flutterfire configure --project=YOUR_PROJECT_ID',
+          );
+        }
+      }
+
+      runApp(
+        ProviderScope(
+          child: AstraLumeApp(firebaseReady: firebaseReady),
+        ),
+      );
     },
     (error, stack) {
-      if (kDebugMode) debugPrint('Uncaught: $error\n$stack');
-      // TODO(stage3): FirebaseCrashlytics.instance.recordError(error, stack)
+      if (kDebugMode) debugPrint('[AstraLume] Uncaught: $error\n$stack');
+      // Crashlytics only records if Firebase was initialized
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     },
   );
 }
 
 class AstraLumeApp extends ConsumerWidget {
-  const AstraLumeApp({super.key});
+  const AstraLumeApp({super.key, required this.firebaseReady});
+
+  final bool firebaseReady;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // TODO(stage3): Replace with generated GoRouter + Riverpod providers
-    return MaterialApp(
+    final router = ref.watch(appRouterProvider);
+
+    return MaterialApp.router(
       title: 'AstraLume',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFD4AF37),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0D0B2A),
-      ),
-      darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0D0B2A),
-      ),
+      theme: AppTheme.darkTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
       supportedLocales: const [
         Locale('en'), Locale('es'), Locale('pt'), Locale('ru'),
       ],
-      home: const _SplashPlaceholder(),
-    );
-  }
-}
-
-class _SplashPlaceholder extends StatelessWidget {
-  const _SplashPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF0D0B2A),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '✦ ASTRALUME ✦',
-              style: TextStyle(
-                color: Color(0xFFD4AF37),
-                fontSize: 28,
-                letterSpacing: 3.0,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'For entertainment purposes only',
-              style: TextStyle(
-                color: Color(0x80FFFFFF),
-                fontSize: 12,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+      routerConfig: router,
     );
   }
 }
