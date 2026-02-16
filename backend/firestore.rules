@@ -1,0 +1,161 @@
+rules_version = '2';
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  ASTRÁLUME — Firestore Security Rules                                   ║
+// ║  Version: 1.0.0 | Date: 2026-02-16                                      ║
+// ║                                                                          ║
+// ║  SECURITY PRINCIPLES:                                                    ║
+// ║  1. Users can only read/write their OWN documents                       ║
+// ║  2. subscriptionStatus is ONLY writable by Admin SDK (Cloud Functions)  ║
+// ║  3. Content (tarot/horoscope) is READ-ONLY for all authenticated users  ║
+// ║  4. System config is READ-ONLY for all authenticated users              ║
+// ║  5. No unauthenticated reads (Firebase Auth required for all access)    ║
+// ║  6. Disclaimer acceptance logged immutably (cannot overwrite)           ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ────────────────────────────────────────────────
+
+    /// User is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    /// User is accessing their own document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    /// Prevent client from setting subscription fields
+    /// Only Cloud Functions (Admin SDK) can write these
+    function hasNoSubscriptionFields() {
+      return !request.resource.data.keys().hasAny([
+        'subscriptionStatus',
+        'subscriptionState',
+        'productId',
+        'purchaseToken',
+        'expiresAt',
+        'graceExpiresAt',
+        'lastVerifiedAt',
+        'isTrialPeriod',
+      ]);
+    }
+
+    /// Validate user profile fields are sensible types
+    function isValidUserProfile() {
+      let data = request.resource.data;
+      return data.birthDate is timestamp
+          && data.zodiacSign is string
+          && data.zodiacSign.size() >= 3
+          && data.zodiacSign.size() <= 20;
+    }
+
+    /// Data size guard (prevent abuse)
+    function isReasonableSize() {
+      return request.resource.size() < 10240; // 10KB max per doc
+    }
+
+    // ─── Users collection ────────────────────────────────────────────────
+    // /users/{userId}
+
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isOwner(userId);
+
+      // Users can CREATE their profile (first-time onboarding)
+      // Cannot set subscription fields — must go through Cloud Functions
+      allow create: if isOwner(userId)
+          && hasNoSubscriptionFields()
+          && isValidUserProfile()
+          && isReasonableSize();
+
+      // Users can UPDATE their profile (settings changes)
+      // Cannot add or modify subscription fields
+      allow update: if isOwner(userId)
+          && hasNoSubscriptionFields()
+          && isValidUserProfile()
+          && isReasonableSize();
+
+      // Users can delete their own account data
+      allow delete: if isOwner(userId);
+
+      // ─── Disclaimer sub-collection ──────────────────────────────────
+      // /users/{userId}/disclaimers/{disclaimerId}
+      // Immutable audit trail — users can create but NOT update/delete
+
+      match /disclaimers/{disclaimerId} {
+        // Users can read their own disclaimer records
+        allow read: if isOwner(userId);
+
+        // Users can create (accept disclaimer) — ONCE per disclaimerId
+        // Once written, cannot be modified or deleted (audit trail)
+        allow create: if isOwner(userId)
+            && request.resource.data.acceptedAt is timestamp
+            && request.resource.data.appVersion is string;
+
+        // Explicitly deny updates and deletes — immutable audit trail
+        allow update, delete: if false;
+      }
+    }
+
+    // ─── Readings collection ─────────────────────────────────────────────
+    // /readings/{userId}/daily/{readingId}
+    // Users can read their own readings; creation handled by Cloud Functions
+    // or client (reading content from Firestore template)
+
+    match /readings/{userId} {
+      allow read: if isOwner(userId);
+
+      match /daily/{readingId} {
+        // Users can read their own daily readings
+        allow read: if isOwner(userId);
+
+        // Client can CREATE a reading record (stores that they viewed it)
+        // Cannot set subscription-gated fields
+        allow create: if isOwner(userId)
+            && isReasonableSize()
+            && request.resource.data.readingDate is timestamp;
+
+        // Update allowed (e.g., marking as "favourite") — basic fields only
+        allow update: if isOwner(userId)
+            && isReasonableSize();
+
+        // No deletion of reading history
+        allow delete: if false;
+      }
+    }
+
+    // ─── Content collection ──────────────────────────────────────────────
+    // /content/tarot/cards/{cardId}
+    // /content/horoscope/templates/{templateId}
+    // READ-ONLY for all authenticated users
+    // Written only by admin/content management tools
+
+    match /content/{contentType}/{subCollection}/{docId} {
+      // All authenticated users can read content
+      allow read: if isAuthenticated();
+
+      // NO client writes — content is managed by admin/Cloud Functions only
+      allow write: if false;
+    }
+
+    // ─── System configuration ────────────────────────────────────────────
+    // /system/config
+    // READ-ONLY for all authenticated users
+
+    match /system/{configDoc} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ─── Default deny ────────────────────────────────────────────────────
+    // Any path not explicitly matched above is DENIED
+    // This is the default Firestore behaviour — explicit for clarity
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

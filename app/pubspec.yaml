@@ -88,9 +88,12 @@ dev_dependencies:
   drift_dev: ^2.20.3
 
   # === TESTING ===
-  mockito: ^5.4.4
-  fake_cloud_firestore: ^3.0.3
-  firebase_auth_mocks: ^0.14.1
+  # mockito: deferred until Stage 3 (5.4.x incompatible with analyzer 7.6.0)
+  # mockito: ^5.4.4
+  # fake_cloud_firestore: deferred until Stage 3 (Firebase integration)
+  # fake_cloud_firestore: ^3.0.3
+  # firebase_auth_mocks: deferred until Stage 3
+  # firebase_auth_mocks: ^0.14.1
 
   # === LINTING ===
   flutter_lints: ^4.0.0
