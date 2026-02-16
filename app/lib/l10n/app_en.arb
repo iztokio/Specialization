@@ -1,0 +1,186 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2026-02-16",
+
+  "appName": "Mystic Tarot",
+  "@appName": { "description": "App name" },
+
+  "disclaimerTitle": "Entertainment Only",
+  "@disclaimerTitle": { "description": "Disclaimer screen title" },
+
+  "disclaimerBody": "This app is for entertainment purposes only. Horoscopes and Tarot readings do not constitute medical, financial, legal, or any other professional advice. Results are generated for entertainment and should not be used as the basis for any real-world decisions.",
+  "@disclaimerBody": { "description": "Full disclaimer text" },
+
+  "disclaimerShort": "For entertainment purposes only • Not professional advice",
+  "@disclaimerShort": { "description": "Short disclaimer shown on readings" },
+
+  "disclaimerAccept": "I understand — for entertainment only",
+  "@disclaimerAccept": { "description": "Disclaimer accept button" },
+
+  "onboardingWelcomeTitle": "Discover Your Cosmic Path",
+  "@onboardingWelcomeTitle": { "description": "Onboarding welcome screen title" },
+
+  "onboardingWelcomeSubtitle": "Daily horoscopes and Tarot readings personalized for you.",
+  "@onboardingWelcomeSubtitle": { "description": "Onboarding welcome subtitle" },
+
+  "onboardingGetStarted": "Begin Your Journey",
+  "@onboardingGetStarted": { "description": "CTA button on welcome screen" },
+
+  "onboardingBirthdateTitle": "When Were You Born?",
+  "@onboardingBirthdateTitle": { "description": "Birth date screen title" },
+
+  "onboardingBirthdateSubtitle": "Your birth date determines your zodiac sign and personalizes your daily reading.",
+  "@onboardingBirthdateSubtitle": { "description": "Birth date screen subtitle" },
+
+  "onboardingBirthdatePlaceholder": "Select your birth date",
+  "@onboardingBirthdatePlaceholder": { "description": "Date picker placeholder" },
+
+  "onboardingPersonalizationTitle": "Tell Us More (Optional)",
+  "@onboardingPersonalizationTitle": { "description": "Personalization screen title" },
+
+  "onboardingPersonalizationSubtitle": "These details help us personalize your reading. All fields are optional.",
+  "@onboardingPersonalizationSubtitle": { "description": "Personalization screen subtitle" },
+
+  "onboardingGenderLabel": "Gender",
+  "onboardingGenderMale": "Male",
+  "onboardingGenderFemale": "Female",
+  "onboardingGenderNonBinary": "Non-binary",
+  "onboardingGenderPreferNot": "Prefer not to say",
+
+  "onboardingBirthTimeLabel": "Time of Birth",
+  "onboardingBirthTimePlaceholder": "e.g. 14:30",
+
+  "onboardingBirthPlaceLabel": "Place of Birth",
+  "onboardingBirthPlacePlaceholder": "City, Country",
+
+  "onboardingSkip": "Skip",
+  "onboardingContinue": "Continue",
+  "onboardingBack": "Back",
+
+  "onboardingNotificationsTitle": "Daily Ritual Reminder",
+  "@onboardingNotificationsTitle": { "description": "Notifications setup title" },
+
+  "onboardingNotificationsSubtitle": "Get a gentle reminder to check your daily horoscope and Tarot card.",
+  "@onboardingNotificationsSubtitle": { "description": "Notifications setup subtitle" },
+
+  "onboardingNotificationsEnable": "Enable Daily Reminder",
+  "onboardingNotificationsSkip": "Not Now",
+  "onboardingNotificationsTime": "Reminder Time",
+
+  "todayTitle": "Today",
+  "@todayTitle": { "description": "Today tab title" },
+
+  "todayHoroscopeSection": "Your Horoscope",
+  "todayTarotSection": "Card of the Day",
+  "todayDateFormat": "EEEE, MMMM d",
+
+  "tarotCardUpright": "Upright",
+  "tarotCardReversed": "Reversed",
+  "tarotCardMeaningGeneral": "General",
+  "tarotCardMeaningLove": "Love",
+  "tarotCardMeaningWork": "Work",
+  "tarotCardMeaningHealth": "Wellbeing",
+  "tarotCardMeaningHealthDisclaimer": "For reflection only — not medical advice",
+
+  "tarotSpreadOne": "One Card",
+  "tarotSpreadThree": "Three Cards",
+  "tarotSpreadThreePremium": "Past · Present · Future",
+  "tarotDrawCard": "Draw Your Card",
+  "tarotDrawSpread": "Draw Your Spread",
+  "tarotRevealCard": "Reveal",
+
+  "historyTitle": "Your Readings",
+  "@historyTitle": { "description": "History tab title" },
+
+  "historyEmpty": "No readings yet. Start your daily ritual!",
+  "historyDaysRemaining": "{days} days of history available",
+  "@historyDaysRemaining": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "historyPremiumUpsell": "Unlock 90 days of history with Premium",
+
+  "settingsTitle": "Settings",
+  "settingsProfile": "My Profile",
+  "settingsZodiacSign": "Zodiac Sign",
+  "settingsNotifications": "Notifications",
+  "settingsLanguage": "Language",
+  "settingsTheme": "Theme",
+  "settingsThemeDark": "Dark",
+  "settingsThemeLight": "Light",
+  "settingsThemeSystem": "System",
+  "settingsSubscription": "Subscription",
+  "settingsManageSubscription": "Manage Subscription",
+  "settingsPrivacyPolicy": "Privacy Policy",
+  "settingsTerms": "Terms of Service",
+  "settingsDeleteAccount": "Delete Account",
+  "settingsVersion": "Version {version}",
+  "@settingsVersion": {
+    "placeholders": { "version": { "type": "String" } }
+  },
+
+  "paywallTitle": "Unlock Your Full Potential",
+  "@paywallTitle": { "description": "Paywall screen title" },
+
+  "paywallSubtitle": "Premium gives you deeper cosmic insights.",
+  "@paywallSubtitle": { "description": "Paywall screen subtitle" },
+
+  "paywallFeature1": "3-Card Tarot Spreads",
+  "paywallFeature2": "90 Days Reading History",
+  "paywallFeature3": "Detailed Card Meanings",
+  "paywallFeature4": "Love, Work & Wellbeing Insights",
+  "paywallFeature5": "No Ads",
+
+  "paywallMonthly": "Monthly",
+  "paywallYearly": "Yearly",
+  "paywallYearlySave": "Save {percent}%",
+  "@paywallYearlySave": {
+    "placeholders": { "percent": { "type": "int" } }
+  },
+  "paywallBestValue": "Best Value",
+  "paywallTrial": "{days}-Day Free Trial",
+  "@paywallTrial": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "paywallCta": "Start Free Trial",
+  "paywallCtaNoTrial": "Subscribe Now",
+  "paywallRestore": "Restore Purchases",
+  "paywallTerms": "Cancel anytime. Subscription renews automatically.",
+  "paywallDisclaimer": "For entertainment purposes only. Results may vary.",
+
+  "subscriptionActive": "Premium Active",
+  "subscriptionExpires": "Renews {date}",
+  "@subscriptionExpires": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "subscriptionGracePeriod": "Payment issue — please update your payment method",
+  "subscriptionExpired": "Subscription expired",
+  "subscriptionCancelled": "Subscription cancelled — active until {date}",
+  "@subscriptionCancelled": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+
+  "premiumRequired": "Premium Feature",
+  "premiumRequiredDescription": "This feature is available with a Premium subscription.",
+  "premiumRequiredCta": "Unlock Premium",
+
+  "offlineTitle": "You're Offline",
+  "offlineBody": "Showing your cached reading for today.",
+
+  "errorGeneric": "Something went wrong. Please try again.",
+  "errorNetworkRequired": "Internet connection required.",
+  "errorPurchaseFailed": "Purchase could not be completed. Please try again.",
+  "errorPurchaseVerification": "Purchase verification failed. Contact support if this persists.",
+
+  "zodiacAries": "Aries",
+  "zodiacTaurus": "Taurus",
+  "zodiacGemini": "Gemini",
+  "zodiacCancer": "Cancer",
+  "zodiacLeo": "Leo",
+  "zodiacVirgo": "Virgo",
+  "zodiacLibra": "Libra",
+  "zodiacScorpio": "Scorpio",
+  "zodiacSagittarius": "Sagittarius",
+  "zodiacCapricorn": "Capricorn",
+  "zodiacAquarius": "Aquarius",
+  "zodiacPisces": "Pisces"
+}
