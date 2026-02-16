@@ -127,7 +127,7 @@ class _OnboardingDisclaimerScreenState
           style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: Text(
-          'You must accept the disclaimer to use AstraVia.',
+          'You must accept the disclaimer to use AstraLume.',
           style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
@@ -249,7 +249,7 @@ class _DisclaimerText extends StatelessWidget {
     const disclaimerText = '''
 This app is for ENTERTAINMENT PURPOSES ONLY.
 
-AstraVia provides horoscopes and Tarot card readings as a form of entertainment and self-reflection. These readings are generated algorithmically and are not based on actual astrological or metaphysical expertise.
+AstraLume provides horoscopes and Tarot card readings as a form of entertainment and self-reflection. These readings are generated algorithmically and are not based on actual astrological or metaphysical expertise.
 
 IMPORTANT: Nothing in this app constitutes:
 • Medical or health advice
@@ -258,7 +258,7 @@ IMPORTANT: Nothing in this app constitutes:
 • Psychological counseling
 • Any other form of professional consultation
 
-Results, readings, and interpretations provided by AstraVia are generated for entertainment purposes and should NOT be used as the basis for any real-world decisions affecting your health, finances, relationships, or legal matters.
+Results, readings, and interpretations provided by AstraLume are generated for entertainment purposes and should NOT be used as the basis for any real-world decisions affecting your health, finances, relationships, or legal matters.
 
 If you have concerns about your health, finances, legal matters, or mental wellbeing, please consult a qualified professional.
 

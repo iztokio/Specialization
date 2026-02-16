@@ -1,4 +1,4 @@
-# USER FLOWS & INFORMATION ARCHITECTURE — AstraVia
+# USER FLOWS & INFORMATION ARCHITECTURE — AstraLume
 **Version:** 0.1.0 | **Date:** 2026-02-16
 
 ---
@@ -34,7 +34,7 @@
 ## 2. INFORMATION ARCHITECTURE
 
 ```
-AstraVia
+AstraLume
 │
 ├── ONBOARDING (first-time only)
 │   ├── Welcome Screen
@@ -232,7 +232,7 @@ Cloud Function restorePurchases called
 
 **Content:**
 - Hero: Lottie animation (floating stars, orbiting rings)
-- H1: "AstraVia" (Cinzel Decorative, celestial gold)
+- H1: "AstraLume" (Cinzel Decorative, celestial gold)
 - H2: Tagline (Raleway Light)
 - CTA: "Begin Your Journey" (full-width, gold background)
 - Secondary: "Sign in" link (for returning users)
@@ -340,7 +340,7 @@ Cloud Function restorePurchases called
 ### Screen 5: Today (Main screen)
 ```
 ┌─────────────────────────────────────┐
-│  AstraVia        🔔  👤            │
+│  AstraLume        🔔  👤            │
 │                                     │
 │  Monday, February 16               │
 │  ♊ GEMINI                           │

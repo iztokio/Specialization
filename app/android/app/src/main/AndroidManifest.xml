@@ -13,7 +13,7 @@
     <!-- <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> -->
 
     <application
-        android:label="Mystic Tarot"
+        android:label="AstraLume"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -49,7 +49,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="mystictarot.app"
+                    android:host="astralume.app"
                     android:pathPrefix="/open" />
             </intent-filter>
         </activity>

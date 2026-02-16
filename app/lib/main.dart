@@ -25,7 +25,7 @@ void main() {
       ]);
       // TODO(stage3): Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
       // TODO(stage3): Crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode)
-      runApp(const ProviderScope(child: MysticTarotApp()));
+      runApp(const ProviderScope(child: AstraLumeApp()));
     },
     (error, stack) {
       if (kDebugMode) debugPrint('Uncaught: $error\n$stack');
@@ -34,14 +34,14 @@ void main() {
   );
 }
 
-class MysticTarotApp extends ConsumerWidget {
-  const MysticTarotApp({super.key});
+class AstraLumeApp extends ConsumerWidget {
+  const AstraLumeApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // TODO(stage3): Replace with generated GoRouter + Riverpod providers
     return MaterialApp(
-      title: 'Mystic Tarot',
+      title: 'AstraLume',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -75,7 +75,7 @@ class _SplashPlaceholder extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              '✦ MYSTIC TAROT ✦',
+              '✦ ASTRALUME ✦',
               style: TextStyle(
                 color: Color(0xFFD4AF37),
                 fontSize: 28,

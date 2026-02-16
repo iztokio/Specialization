@@ -36,7 +36,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.mystictarot.app"
+    namespace "com.astralume.horoscope"
     compileSdkVersion 35
     ndkVersion flutter.ndkVersion
 
@@ -56,7 +56,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.mystictarot.app"
+        applicationId "com.astralume.horoscope"
         minSdkVersion 23          // Android 6.0+ (covers ~95% of devices)
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()

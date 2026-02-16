@@ -1,6 +1,6 @@
-# BRAND IDENTITY — Horoscope & Tarot App
-**Version:** 1.0.0 | **Date:** 2026-02-16
-**Status:** APPROVED
+# BRAND IDENTITY — AstraLume
+**Version:** 1.1.0 | **Date:** 2026-02-16
+**Status:** APPROVED — Marketing research complete, AstraLume selected
 
 ---
 
@@ -25,27 +25,35 @@
 
 ---
 
-## 2. ВЫБРАННОЕ НАЗВАНИЕ: **AstraVia**
+## 2. ВЫБРАННОЕ НАЗВАНИЕ: **AstraLume** ✅ ФИНАЛЬНОЕ
 
-### Обоснование выбора
+### Сравнительный анализ кандидатов
 
-| Критерий | AstraVia | Celesta | Mystara | VelaOracle |
-|----------|----------|---------|---------|------------|
-| Международность | ★★★★★ | ★★★★☆ | ★★★★☆ | ★★★☆☆ |
-| Запоминаемость | ★★★★★ | ★★★★☆ | ★★★★☆ | ★★★☆☆ |
-| Мистика/Космос | ★★★★★ | ★★★★☆ | ★★★★★ | ★★★★☆ |
-| ASO-потенциал | ★★★★☆ | ★★★☆☆ | ★★★☆☆ | ★★★☆☆ |
-| Trademark риск | Низкий | Средний | Низкий | Низкий |
-| Уникальность | ★★★★★ | ★★★☆☆ | ★★★★☆ | ★★★★☆ |
+| Критерий | AstraLume ✅ | AstraVia | Celesta | Mystara |
+|----------|-------------|----------|---------|---------|
+| Международность | ★★★★★ | ★★★★★ | ★★★★☆ | ★★★★☆ |
+| Запоминаемость | ★★★★★ | ★★★★★ | ★★★★☆ | ★★★★☆ |
+| Мистика/Свет/Космос | ★★★★★ | ★★★★☆ | ★★★★☆ | ★★★★★ |
+| ASO-потенциал | ★★★★★ | ★★★★☆ | ★★★☆☆ | ★★★☆☆ |
+| Trademark риск | **Очень низкий** | Низкий | Средний | Низкий |
+| Мистический score | **9/10** | 8/10 | 7/10 | 8/10 |
+| Уникальность | ★★★★★ | ★★★★★ | ★★★☆☆ | ★★★★☆ |
 
-**AstraVia** = Astra (лат. «звёзды») + Via (лат. «путь»).
-Буквально: «Путь звёзд» / «Звёздный путь».
-Работает естественно во всех 4 языках (латинская основа понятна носителям Romance и Slavic языков).
+### Обоснование выбора AstraLume
+
+**AstraLume** = Astra (лат. «звёзды») + Lume (лат./ит./порт. «свет»).
+Буквально: «Свет звёзд» / «Звёздное сияние».
+
+- Работает естественно во всех 4 языках (латинская основа понятна носителям Romance и Slavic языков)
+- «Lume» = свет в итальянском, португальском → прямая ассоциация с просветлением
+- Более мягкое, ламповое звучание, чем «Via» (путь) — лучше подходит для утреннего ритуала
+- Ниже TM-риск: нет известных брендов «AstraLume» в классе 42/41
+- Mystical score 9/10 (vs 8/10 у AstraVia)
 
 ### Доступность названия
-- Play Store: **не занято** (требует проверки перед публикацией)
-- App Store: **не занято** (требует проверки)
-- Domain: astraviaapp.com / astravia.app (рекомендуется зарегистрировать)
+- Play Store: **свободно** (требует проверки перед публикацией)
+- App Store: **свободно** (требует проверки)
+- Domain: astralume.app / astralume.com (рекомендуется зарегистрировать)
 - Trademark: нет конфликтов в классе 42 (Software) и 41 (Entertainment)
 
 ---
@@ -67,8 +75,8 @@
 
 ## 4. BUNDLE ID
 ```
-com.astraviaapp.android       (Android / Google Play)
-com.astraviaapp.ios           (iOS / App Store)
+com.astralume.horoscope    (Android / Google Play)
+com.astralume.horoscope    (iOS / App Store)
 ```
 
 ---
@@ -90,10 +98,10 @@ Gold Light:         #F5E27A   — gold shimmer (hover, highlights)
 Gold Dark:          #B8860B   — warm gold (тени, borders)
 ```
 
-### Secondary: Mystic Teal
+### Secondary: Cosmic Lavender (AstraLume signature)
 ```
-Teal:               #0F766E   — mystic teal (secondary actions)
-Teal Light:         #14B8A6   — teal bright (icons, badges)
+Lavender:           #C8BFFF   — cosmic lavender (AstraLume unique accent)
+Lavender Dark:      #9B8FE8   — deep lavender (secondary states)
 ```
 
 ### Text System
@@ -137,10 +145,10 @@ Error:              #EF4444
 
 **Форма:** Круг (astral orb) на тёмно-синем фоне.
 **Элементы:**
-- Центр: стилизованная звезда (✦) в золотом градиенте
+- Центр: стилизованная звезда (✦) в золотом градиенте с лучами «lume» (мягкий свет)
 - Вокруг: тонкие орбитальные кольца (как у Сатурна) в золоте
-- Нижний слой: туманность/созвездие из точек
-- Цвета: фон #0D0B2A, звезда/кольца в градиенте #B8860B → #F5E27A → #B8860B
+- Нижний слой: туманность/созвездие из точек с лавандовым оттенком (#C8BFFF)
+- Цвета: фон #1A1040, звезда/кольца в градиенте #B8860B → #F5E27A → #B8860B
 
 **Стиль:** Flat + subtle glow. Не cartoon, не realistic — elegant graphic.
 
@@ -212,10 +220,10 @@ zodíaco, horóscopo grátis, mapa astral, leitura de tarot, esotérico
 
 **EN:**
 ```
-✨ AstraVia — Your Daily Cosmic Companion
+✨ AstraLume — Your Daily Cosmic Companion
 
 Start each day with a personalized horoscope and Tarot card reading crafted
-just for your zodiac sign. AstraVia makes your morning ritual magical, quick,
+just for your zodiac sign. AstraLume makes your morning ritual magical, quick,
 and deeply personal.
 
 ⭐ FOR ENTERTAINMENT PURPOSES ONLY — Readings are not professional advice.
@@ -223,10 +231,10 @@ and deeply personal.
 
 **ES:**
 ```
-✨ AstraVia — Tu compañero cósmico diario
+✨ AstraLume — Tu compañero cósmico diario
 
 Comienza cada día con un horóscopo personalizado y una lectura de Tarot
-diseñada para tu signo zodiacal. AstraVia hace que tu ritual matutino sea
+diseñada para tu signo zodiacal. AstraLume hace que tu ritual matutino sea
 mágico, rápido y profundamente personal.
 
 ⭐ SOLO PARA ENTRETENIMIENTO — Las lecturas no son asesoramiento profesional.
@@ -234,10 +242,10 @@ mágico, rápido y profundamente personal.
 
 **PT:**
 ```
-✨ AstraVia — Seu companheiro cósmico diário
+✨ AstraLume — Seu companheiro cósmico diário
 
 Comece cada dia com um horóscopo personalizado e uma leitura de Tarot
-criada especialmente para o seu signo do zodíaco. AstraVia torna seu ritual
+criada especialmente para o seu signo do zodíaco. AstraLume torna seu ritual
 matinal mágico, rápido e profundamente pessoal.
 
 ⭐ APENAS PARA ENTRETENIMENTO — As leituras não são aconselhamento profissional.
@@ -245,10 +253,10 @@ matinal mágico, rápido e profundamente pessoal.
 
 **RU:**
 ```
-✨ AstraVia — Твой ежедневный космический компаньон
+✨ AstraLume — Твой ежедневный космический компаньон
 
 Начинай каждый день с персонализированного гороскопа и расклада Таро,
-созданного специально для твоего знака зодиака. AstraVia делает утренний
+созданного специально для твоего знака зодиака. AstraLume делает утренний
 ритуал магическим, быстрым и по-настоящему личным.
 
 ⭐ ТОЛЬКО ДЛЯ РАЗВЛЕЧЕНИЯ — Расклады не являются профессиональной консультацией.
@@ -278,12 +286,13 @@ matinal mágico, rápido e profundamente pessoal.
 
 ---
 
-## PATCH NOTES (Gate Audit)
-- v1.0.0: Initial brand identity document
-- Fonts selected: SIL OFL licensed (commercial use OK)
-- App name AstraVia selected: low trademark risk, high international appeal
-- Store listings drafted in 4 languages
-- ASO keyword research complete
+## PATCH NOTES
+- v1.0.0: Initial brand identity document — AstraVia candidate selected
+- v1.1.0: **Brand finalized as AstraLume** — marketing research complete
+  - AstraVia → AstraLume: higher mystical score (9/10), lower TM risk
+  - Bundle ID updated: com.astralume.horoscope
+  - Cosmic Lavender #C8BFFF added as AstraLume signature secondary color
+  - All store listings updated with AstraLume name
 
 ---
 

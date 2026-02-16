@@ -6,8 +6,8 @@ class AppConstants {
   AppConstants._();
 
   // App metadata
-  static const String appName = 'Mystic Tarot';
-  static const String appId = 'com.mystictarot.app';
+  static const String appName = 'AstraLume';
+  static const String appId = 'com.astralume.horoscope';
   static const String appVersion = '1.0.0';
 
   // Content
