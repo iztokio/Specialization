@@ -106,6 +106,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/backgrounds/
     - assets/images/tarot/
     - assets/images/zodiac/
     - assets/lottie/
