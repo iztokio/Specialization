@@ -112,7 +112,12 @@ class HoroscopeRemoteDatasource {
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
+/// Returns null when Firebase is not initialized (offline mode).
 final horoscopeRemoteDatasourceProvider =
-    Provider<HoroscopeRemoteDatasource>((ref) {
-  return HoroscopeRemoteDatasource(FirebaseFirestore.instance);
+    Provider<HoroscopeRemoteDatasource?>((ref) {
+  try {
+    return HoroscopeRemoteDatasource(FirebaseFirestore.instance);
+  } catch (_) {
+    return null; // Firebase not initialized — offline mode
+  }
 });

@@ -71,8 +71,9 @@ class _OnboardingBirthdateScreenState
         birthDate: date,
       );
       await ref.read(userProfileRepositoryProvider).saveProfile(profile);
-      // Invalidate userProfileProvider so router redirect re-evaluates
-      ref.invalidate(userProfileProvider);
+      // Don't invalidate userProfileProvider here — onboardingDone is still
+      // false, so invalidation would cause a loading→splash redirect loop.
+      // The router re-evaluates when completeOnboarding() is called later.
 
       if (!mounted) return;
       context.push(AppRoutes.onboardingDisclaimer);

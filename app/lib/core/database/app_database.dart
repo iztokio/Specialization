@@ -129,7 +129,19 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
+    Directory dir;
+    try {
+      // Prefer application support dir (maps to XDG_DATA_HOME on Linux)
+      dir = await getApplicationSupportDirectory();
+    } catch (_) {
+      try {
+        dir = await getApplicationDocumentsDirectory();
+      } catch (_) {
+        // Final fallback for headless/CI environments
+        dir = Directory('/tmp/astralume');
+        await dir.create(recursive: true);
+      }
+    }
     final file = File(p.join(dir.path, 'astralume.db'));
     return NativeDatabase.createInBackground(file);
   });

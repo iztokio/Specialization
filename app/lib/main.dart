@@ -72,7 +72,11 @@ void main() {
     (error, stack) {
       if (kDebugMode) debugPrint('[AstraLume] Uncaught: $error\n$stack');
       // Crashlytics only records if Firebase was initialized
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      try {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      } catch (_) {
+        // Firebase not initialized (offline mode) — cannot report to Crashlytics
+      }
     },
   );
 }

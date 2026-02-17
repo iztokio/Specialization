@@ -90,7 +90,12 @@ class SubscriptionRemoteDatasource {
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
+/// Returns null when Firebase is not initialized (offline mode).
 final subscriptionRemoteDatasourceProvider =
-    Provider<SubscriptionRemoteDatasource>((ref) {
-  return SubscriptionRemoteDatasource(FirebaseFirestore.instance);
+    Provider<SubscriptionRemoteDatasource?>((ref) {
+  try {
+    return SubscriptionRemoteDatasource(FirebaseFirestore.instance);
+  } catch (_) {
+    return null; // Firebase not initialized — offline mode
+  }
 });

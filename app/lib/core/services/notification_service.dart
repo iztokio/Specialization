@@ -18,7 +18,8 @@ import '../constants/app_constants.dart';
 class NotificationService {
   NotificationService(this._messaging, this._localNotifications);
 
-  final FirebaseMessaging _messaging;
+  /// Nullable: null when Firebase is not initialized (offline mode).
+  final FirebaseMessaging? _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   /// Initialize notification channels and FCM listeners.
@@ -54,38 +55,53 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    // Handle FCM messages when app is in foreground
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-    // Handle notification tap when app was in background
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessageTap);
+    // Handle FCM messages when app is in foreground (no-op in offline mode)
+    try {
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessageTap);
+    } catch (_) {
+      // Firebase not initialized — skip FCM listeners
+    }
 
     // Set FCM foreground presentation options (iOS)
-    await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      await _messaging?.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (_) {
+      // Offline — skip
+    }
   }
 
   /// Request notification permission (call after onboarding).
   /// Returns true if permission granted.
   Future<bool> requestPermission() async {
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    return settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
+    final messaging = _messaging;
+    if (messaging == null) return false; // Offline — no permission to request
+    try {
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+      return settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Get FCM registration token for this device.
   /// Token is sent to server to enable targeted push notifications.
   Future<String?> getToken() async {
-    return _messaging.getToken();
+    try {
+      return await _messaging?.getToken();
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Schedule daily horoscope notification at [time] (HH:mm format).
@@ -173,8 +189,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 // ─── Riverpod providers ──────────────────────────────────────────────────────
 
-final firebaseMessagingProvider = Provider<FirebaseMessaging>((ref) {
-  return FirebaseMessaging.instance;
+/// Returns null when Firebase is not initialized (offline mode).
+final firebaseMessagingProvider = Provider<FirebaseMessaging?>((ref) {
+  try {
+    return FirebaseMessaging.instance;
+  } catch (_) {
+    return null; // Firebase not initialized — offline mode
+  }
 });
 
 final localNotificationsProvider =

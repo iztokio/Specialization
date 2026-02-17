@@ -139,7 +139,8 @@ GoRouter appRouter(AppRouterRef ref) {
           profileAsync.valueOrNull?.hasCompletedOnboarding ?? false;
 
       if (!isOnboardingDone) {
-        if (!onOnboarding && !onSplash) return AppRoutes.onboarding;
+        // Splash is a transit state — once loading done, always go to onboarding
+        if (!onOnboarding) return AppRoutes.onboarding;
         return null;
       }
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/providers/core_providers.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/theme/app_theme.dart';
 
@@ -46,13 +47,15 @@ class _OnboardingNotificationsScreenState
   }
 
   Future<void> _completeOnboarding() async {
-    final userId = ref.read(currentUserIdProvider);
-    if (userId != null) {
-      await ref.read(userProfileRepositoryProvider).completeOnboarding(userId);
-      ref.invalidate(userProfileProvider);
-    }
+    // Use authUserIdProvider — always non-null ('local_user_fallback' offline).
+    // currentUserIdProvider reads from userProfileProvider which may not be
+    // refreshed yet at this point in the onboarding flow.
+    final userId = ref.read(authUserIdProvider);
+    await ref.read(userProfileRepositoryProvider).completeOnboarding(userId);
+    ref.invalidate(userProfileProvider);
     if (!mounted) return;
-    // GoRouter redirect will fire automatically after userProfileProvider updates
+    // GoRouter redirect fires automatically once userProfileProvider reloads
+    // with onboardingDone = true. The explicit go() handles the race case.
     context.go(AppRoutes.today);
   }
 

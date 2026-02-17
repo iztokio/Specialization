@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
 
 /// Disclaimer Screen — ОБЯЗАТЕЛЬНЫЙ экран, нельзя пропустить.
@@ -111,10 +113,8 @@ class _OnboardingDisclaimerScreenState
   }
 
   void _onAccept(BuildContext context) {
-    // TODO(stage3): Save disclaimer acceptance to Firestore
-    // TODO(stage3): Log analytics event: onboarding_disclaimer_accepted
-    // TODO(stage3): GoRouter.of(context).push('/onboarding/notifications')
-    Navigator.of(context).pop();
+    // TODO(stage4): Log analytics event: onboarding_disclaimer_accepted
+    context.push(AppRoutes.onboardingNotifications);
   }
 
   void _showExitDialog(BuildContext context) {
