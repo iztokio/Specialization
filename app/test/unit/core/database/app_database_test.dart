@@ -52,10 +52,14 @@ void main() {
     });
 
     test('upsertDailyReading stores and retrieves reading', () async {
-      final date = DateTime(2026, 2, 16);
-      final expires = date.add(const Duration(hours: 24));
+      final date = DateTime.now();
+      final expires = date.add(const Duration(hours: 24)); // always in future
+      // Compute id the same way AppDatabase does
+      final mm = date.month.toString().padLeft(2, '0');
+      final dd = date.day.toString().padLeft(2, '0');
+      final expectedId = 'user1_${date.year}${mm}${dd}_gemini';
       final companion = DailyReadingsTableCompanion.insert(
-        id: 'user1_20260216_gemini',
+        id: expectedId,
         userId: 'user1',
         readingDate: date,
         zodiacSign: 'gemini',
@@ -79,7 +83,7 @@ void main() {
       );
 
       expect(result, isNotNull);
-      expect(result!.id, 'user1_20260216_gemini');
+      expect(result!.id, expectedId);
       expect(result.generalText, 'Stars align for Gemini today.');
       expect(result.cardIndex, 17);
       expect(result.isReversed, false);
