@@ -1,0 +1,19 @@
+# build.yaml — AstraLume
+# Configures which builders run during `flutter pub run build_runner build`
+#
+# Problem: mockito 5.4.x builder is incompatible with analyzer 7.6.0
+# Solution: disable mockito's builder; we use manual fakes in tests instead
+# Mockito mocks will be re-enabled when we upgrade to mockito ^5.4.6+ (Stage 3)
+
+targets:
+  $default:
+    builders:
+      # Disable mockito auto-mock builder (incompatible with analyzer 7.6.0)
+      mockito|mockBuilder:
+        enabled: false
+
+      # Drift code generation — keep enabled
+      drift_dev|drift_classes:
+        enabled: true
+      drift_dev|drift_cleanup:
+        enabled: true

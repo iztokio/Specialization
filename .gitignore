@@ -1,0 +1,100 @@
+# ============================================================
+# SECRETS — NEVER COMMIT
+# ============================================================
+*.env
+.env.*
+!.env.example
+google-services.json
+GoogleService-Info.plist
+android/key.properties
+android/keystore.jks
+android/app/keystore.jks
+*.keystore
+*.jks
+**/secrets/
+**/credentials/
+firebase-service-account.json
+service-account*.json
+
+# ============================================================
+# FLUTTER / DART
+# ============================================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.lock
+!pubspec.lock
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+app/lib/l10n/app_localizations*.dart
+app/lib/firebase_options.dart
+
+# ============================================================
+# ANDROID
+# ============================================================
+app/android/.gradle/
+app/android/captures/
+app/android/gradlew
+app/android/gradlew.bat
+app/android/local.properties
+app/android/*.iml
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+app/android/**/*.class
+app/android/**/*.jar
+app/android/**/*.ap_
+app/android/app/.externalNativeBuild/
+
+# ============================================================
+# iOS
+# ============================================================
+app/ios/.symlinks/
+app/ios/Flutter/App.framework
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/ephemeral/
+app/ios/Pods/
+app/ios/Runner.xcworkspace/
+
+# ============================================================
+# IDE
+# ============================================================
+.idea/
+*.iml
+*.ipr
+.vscode/settings.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# NODE / BACKEND
+# ============================================================
+backend/functions/node_modules/
+backend/functions/lib/
+backend/.runtimeconfig.json
+
+# ============================================================
+# COVERAGE
+# ============================================================
+coverage/
+*.lcov
+
+# ============================================================
+# MISC
+# ============================================================
+*.log
+*.pid
+*.seed
+*.bak
+*.tmp

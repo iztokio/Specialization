@@ -1,0 +1,152 @@
+{
+  "@@locale": "ru",
+  "@@last_modified": "2026-02-16",
+
+  "appName": "Mystic Tarot",
+
+  "disclaimerTitle": "Только для развлечения",
+  "disclaimerBody": "Приложение предназначено исключительно для развлечения. Гороскопы и расклады Таро не являются медицинской, финансовой, юридической или иной профессиональной консультацией. Результаты носят развлекательный характер и не должны использоваться как основа для принятия реальных решений.",
+  "disclaimerShort": "Только для развлечения • Не является профессиональной консультацией",
+  "disclaimerAccept": "Понимаю — только для развлечения",
+
+  "onboardingWelcomeTitle": "Открой свой космический путь",
+  "onboardingWelcomeSubtitle": "Ежедневные гороскопы и расклады Таро, персонализированные для тебя.",
+  "onboardingGetStarted": "Начать путешествие",
+
+  "onboardingBirthdateTitle": "Когда ты родился(-ась)?",
+  "onboardingBirthdateSubtitle": "Дата рождения определяет твой знак зодиака и персонализирует ежедневный расклад.",
+  "onboardingBirthdatePlaceholder": "Выбери дату рождения",
+
+  "onboardingPersonalizationTitle": "Расскажи о себе (необязательно)",
+  "onboardingPersonalizationSubtitle": "Эти данные помогут персонализировать твой расклад. Все поля необязательны.",
+
+  "onboardingGenderLabel": "Пол",
+  "onboardingGenderMale": "Мужской",
+  "onboardingGenderFemale": "Женский",
+  "onboardingGenderNonBinary": "Небинарный",
+  "onboardingGenderPreferNot": "Предпочитаю не указывать",
+
+  "onboardingBirthTimeLabel": "Время рождения",
+  "onboardingBirthTimePlaceholder": "например, 14:30",
+
+  "onboardingBirthPlaceLabel": "Место рождения",
+  "onboardingBirthPlacePlaceholder": "Город, Страна",
+
+  "onboardingSkip": "Пропустить",
+  "onboardingContinue": "Продолжить",
+  "onboardingBack": "Назад",
+
+  "onboardingNotificationsTitle": "Напоминание о ежедневном ритуале",
+  "onboardingNotificationsSubtitle": "Получай мягкое напоминание проверить гороскоп и карту дня.",
+  "onboardingNotificationsEnable": "Включить напоминания",
+  "onboardingNotificationsSkip": "Не сейчас",
+  "onboardingNotificationsTime": "Время напоминания",
+
+  "todayTitle": "Сегодня",
+  "todayHoroscopeSection": "Твой гороскоп",
+  "todayTarotSection": "Карта дня",
+  "todayDateFormat": "EEEE, d MMMM",
+
+  "tarotCardUpright": "Прямое",
+  "tarotCardReversed": "Перевёрнутое",
+  "tarotCardMeaningGeneral": "Общее",
+  "tarotCardMeaningLove": "Любовь",
+  "tarotCardMeaningWork": "Работа",
+  "tarotCardMeaningHealth": "Благополучие",
+  "tarotCardMeaningHealthDisclaimer": "Только для размышления — не является медицинским советом",
+
+  "tarotSpreadOne": "Одна карта",
+  "tarotSpreadThree": "Три карты",
+  "tarotSpreadThreePremium": "Прошлое · Настоящее · Будущее",
+  "tarotDrawCard": "Вытянуть карту",
+  "tarotDrawSpread": "Сделать расклад",
+  "tarotRevealCard": "Открыть",
+
+  "historyTitle": "Мои расклады",
+  "historyEmpty": "Раскладов пока нет. Начни свой ежедневный ритуал!",
+  "historyDaysRemaining": "Доступно {days} дней истории",
+  "@historyDaysRemaining": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "historyPremiumUpsell": "Откройте 90 дней истории с Премиум",
+
+  "settingsTitle": "Настройки",
+  "settingsProfile": "Мой профиль",
+  "settingsZodiacSign": "Знак зодиака",
+  "settingsNotifications": "Уведомления",
+  "settingsLanguage": "Язык",
+  "settingsTheme": "Тема",
+  "settingsThemeDark": "Тёмная",
+  "settingsThemeLight": "Светлая",
+  "settingsThemeSystem": "Системная",
+  "settingsSubscription": "Подписка",
+  "settingsManageSubscription": "Управление подпиской",
+  "settingsPrivacyPolicy": "Политика конфиденциальности",
+  "settingsTerms": "Условия использования",
+  "settingsDeleteAccount": "Удалить аккаунт",
+  "settingsVersion": "Версия {version}",
+  "@settingsVersion": {
+    "placeholders": { "version": { "type": "String" } }
+  },
+
+  "paywallTitle": "Раскрой свой полный потенциал",
+  "paywallSubtitle": "Премиум открывает более глубокие космические знания.",
+  "paywallFeature1": "Расклады из 3 карт Таро",
+  "paywallFeature2": "90 дней истории раскладов",
+  "paywallFeature3": "Подробные значения карт",
+  "paywallFeature4": "Любовь, работа и благополучие",
+  "paywallFeature5": "Без рекламы",
+  "paywallMonthly": "В месяц",
+  "paywallYearly": "В год",
+  "paywallYearlySave": "Экономия {percent}%",
+  "@paywallYearlySave": {
+    "placeholders": { "percent": { "type": "int" } }
+  },
+  "paywallBestValue": "Лучшее предложение",
+  "paywallTrial": "{days} дней бесплатно",
+  "@paywallTrial": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "paywallCta": "Начать бесплатный период",
+  "paywallCtaNoTrial": "Оформить подписку",
+  "paywallRestore": "Восстановить покупки",
+  "paywallTerms": "Отменить можно в любое время. Подписка продлевается автоматически.",
+  "paywallDisclaimer": "Только для развлечения. Результаты могут отличаться.",
+
+  "subscriptionActive": "Премиум активен",
+  "subscriptionExpires": "Продлевается {date}",
+  "@subscriptionExpires": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "subscriptionGracePeriod": "Проблема с оплатой — обновите способ оплаты",
+  "subscriptionExpired": "Подписка истекла",
+  "subscriptionCancelled": "Подписка отменена — активна до {date}",
+  "@subscriptionCancelled": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+
+  "premiumRequired": "Функция Премиум",
+  "premiumRequiredDescription": "Эта функция доступна по подписке Премиум.",
+  "premiumRequiredCta": "Открыть Премиум",
+
+  "offlineTitle": "Нет подключения",
+  "offlineBody": "Показывается кэшированный расклад на сегодня.",
+
+  "errorGeneric": "Что-то пошло не так. Попробуй ещё раз.",
+  "errorNetworkRequired": "Необходимо подключение к интернету.",
+  "errorPurchaseFailed": "Не удалось завершить покупку. Попробуй ещё раз.",
+  "errorPurchaseVerification": "Ошибка подтверждения покупки. Обратись в поддержку.",
+
+  "zodiacAries": "Овен",
+  "zodiacTaurus": "Телец",
+  "zodiacGemini": "Близнецы",
+  "zodiacCancer": "Рак",
+  "zodiacLeo": "Лев",
+  "zodiacVirgo": "Дева",
+  "zodiacLibra": "Весы",
+  "zodiacScorpio": "Скорпион",
+  "zodiacSagittarius": "Стрелец",
+  "zodiacCapricorn": "Козерог",
+  "zodiacAquarius": "Водолей",
+  "zodiacPisces": "Рыбы"
+}

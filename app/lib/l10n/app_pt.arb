@@ -1,0 +1,152 @@
+{
+  "@@locale": "pt",
+  "@@last_modified": "2026-02-16",
+
+  "appName": "Mystic Tarot",
+
+  "disclaimerTitle": "Apenas entretenimento",
+  "disclaimerBody": "Este aplicativo é apenas para entretenimento. Horóscopos e leituras de Tarot não constituem aconselhamento médico, financeiro, jurídico ou qualquer outro tipo de aconselhamento profissional. Os resultados são gerados para entretenimento e não devem ser usados como base para decisões reais.",
+  "disclaimerShort": "Apenas para entretenimento • Não é conselho profissional",
+  "disclaimerAccept": "Entendo — apenas para entretenimento",
+
+  "onboardingWelcomeTitle": "Descubra seu caminho cósmico",
+  "onboardingWelcomeSubtitle": "Horóscopos diários e leituras de Tarot personalizadas para você.",
+  "onboardingGetStarted": "Começar a jornada",
+
+  "onboardingBirthdateTitle": "Quando você nasceu?",
+  "onboardingBirthdateSubtitle": "Sua data de nascimento determina seu signo do zodíaco e personaliza sua leitura diária.",
+  "onboardingBirthdatePlaceholder": "Selecione sua data de nascimento",
+
+  "onboardingPersonalizationTitle": "Conte-nos mais (opcional)",
+  "onboardingPersonalizationSubtitle": "Esses detalhes nos ajudam a personalizar sua leitura. Todos os campos são opcionais.",
+
+  "onboardingGenderLabel": "Gênero",
+  "onboardingGenderMale": "Masculino",
+  "onboardingGenderFemale": "Feminino",
+  "onboardingGenderNonBinary": "Não-binário",
+  "onboardingGenderPreferNot": "Prefiro não dizer",
+
+  "onboardingBirthTimeLabel": "Hora de nascimento",
+  "onboardingBirthTimePlaceholder": "ex: 14:30",
+
+  "onboardingBirthPlaceLabel": "Local de nascimento",
+  "onboardingBirthPlacePlaceholder": "Cidade, País",
+
+  "onboardingSkip": "Pular",
+  "onboardingContinue": "Continuar",
+  "onboardingBack": "Voltar",
+
+  "onboardingNotificationsTitle": "Lembrete de ritual diário",
+  "onboardingNotificationsSubtitle": "Receba um lembrete gentil para verificar seu horóscopo e carta do dia.",
+  "onboardingNotificationsEnable": "Ativar lembrete diário",
+  "onboardingNotificationsSkip": "Agora não",
+  "onboardingNotificationsTime": "Horário do lembrete",
+
+  "todayTitle": "Hoje",
+  "todayHoroscopeSection": "Seu horóscopo",
+  "todayTarotSection": "Carta do dia",
+  "todayDateFormat": "EEEE, d 'de' MMMM",
+
+  "tarotCardUpright": "Normal",
+  "tarotCardReversed": "Invertida",
+  "tarotCardMeaningGeneral": "Geral",
+  "tarotCardMeaningLove": "Amor",
+  "tarotCardMeaningWork": "Trabalho",
+  "tarotCardMeaningHealth": "Bem-estar",
+  "tarotCardMeaningHealthDisclaimer": "Apenas para reflexão — não é conselho médico",
+
+  "tarotSpreadOne": "Uma carta",
+  "tarotSpreadThree": "Três cartas",
+  "tarotSpreadThreePremium": "Passado · Presente · Futuro",
+  "tarotDrawCard": "Tirar sua carta",
+  "tarotDrawSpread": "Fazer a tiragem",
+  "tarotRevealCard": "Revelar",
+
+  "historyTitle": "Minhas leituras",
+  "historyEmpty": "Nenhuma leitura ainda. Comece seu ritual diário!",
+  "historyDaysRemaining": "{days} dias de histórico disponíveis",
+  "@historyDaysRemaining": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "historyPremiumUpsell": "Desbloqueie 90 dias de histórico com Premium",
+
+  "settingsTitle": "Configurações",
+  "settingsProfile": "Meu perfil",
+  "settingsZodiacSign": "Signo do zodíaco",
+  "settingsNotifications": "Notificações",
+  "settingsLanguage": "Idioma",
+  "settingsTheme": "Tema",
+  "settingsThemeDark": "Escuro",
+  "settingsThemeLight": "Claro",
+  "settingsThemeSystem": "Sistema",
+  "settingsSubscription": "Assinatura",
+  "settingsManageSubscription": "Gerenciar assinatura",
+  "settingsPrivacyPolicy": "Política de privacidade",
+  "settingsTerms": "Termos de serviço",
+  "settingsDeleteAccount": "Excluir conta",
+  "settingsVersion": "Versão {version}",
+  "@settingsVersion": {
+    "placeholders": { "version": { "type": "String" } }
+  },
+
+  "paywallTitle": "Desbloqueie todo o seu potencial",
+  "paywallSubtitle": "Premium oferece percepções cósmicas mais profundas.",
+  "paywallFeature1": "Tiragens de 3 cartas de Tarot",
+  "paywallFeature2": "90 dias de histórico de leituras",
+  "paywallFeature3": "Significados detalhados das cartas",
+  "paywallFeature4": "Amor, trabalho e bem-estar",
+  "paywallFeature5": "Sem anúncios",
+  "paywallMonthly": "Mensal",
+  "paywallYearly": "Anual",
+  "paywallYearlySave": "Economize {percent}%",
+  "@paywallYearlySave": {
+    "placeholders": { "percent": { "type": "int" } }
+  },
+  "paywallBestValue": "Melhor oferta",
+  "paywallTrial": "{days} dias de teste grátis",
+  "@paywallTrial": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "paywallCta": "Começar teste grátis",
+  "paywallCtaNoTrial": "Assinar agora",
+  "paywallRestore": "Restaurar compras",
+  "paywallTerms": "Cancele a qualquer momento. A assinatura é renovada automaticamente.",
+  "paywallDisclaimer": "Apenas para entretenimento. Os resultados podem variar.",
+
+  "subscriptionActive": "Premium ativo",
+  "subscriptionExpires": "Renova em {date}",
+  "@subscriptionExpires": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "subscriptionGracePeriod": "Problema de pagamento — atualize seu método de pagamento",
+  "subscriptionExpired": "Assinatura expirada",
+  "subscriptionCancelled": "Assinatura cancelada — ativa até {date}",
+  "@subscriptionCancelled": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+
+  "premiumRequired": "Recurso Premium",
+  "premiumRequiredDescription": "Este recurso está disponível com uma assinatura Premium.",
+  "premiumRequiredCta": "Desbloquear Premium",
+
+  "offlineTitle": "Sem conexão",
+  "offlineBody": "Mostrando sua leitura em cache para hoje.",
+
+  "errorGeneric": "Algo deu errado. Por favor, tente novamente.",
+  "errorNetworkRequired": "É necessária uma conexão com a Internet.",
+  "errorPurchaseFailed": "Não foi possível concluir a compra. Tente novamente.",
+  "errorPurchaseVerification": "Falha na verificação da compra. Entre em contato com o suporte.",
+
+  "zodiacAries": "Áries",
+  "zodiacTaurus": "Touro",
+  "zodiacGemini": "Gêmeos",
+  "zodiacCancer": "Câncer",
+  "zodiacLeo": "Leão",
+  "zodiacVirgo": "Virgem",
+  "zodiacLibra": "Libra",
+  "zodiacScorpio": "Escorpião",
+  "zodiacSagittarius": "Sagitário",
+  "zodiacCapricorn": "Capricórnio",
+  "zodiacAquarius": "Aquário",
+  "zodiacPisces": "Peixes"
+}
