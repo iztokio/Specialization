@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../features/history/presentation/screens/history_screen.dart';
+import '../../features/tarot/presentation/screens/tarot_draw_screen.dart' as tarot_draw;
 import '../../features/onboarding/presentation/screens/onboarding_birthdate_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_disclaimer_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_notifications_screen.dart';
@@ -112,7 +113,7 @@ GoRouter appRouter(AppRouterRef ref) {
       GoRoute(
         path: AppRoutes.tarotDraw,
         pageBuilder: (context, state) =>
-            _buildPage(state: state, child: const TarotDrawScreen()),
+            _buildPage(state: state, child: const tarot_draw.TarotDrawScreen()),
       ),
     ],
 
@@ -292,20 +293,6 @@ class MainShell extends StatelessWidget {
       ),
     );
   }
-}
-
-// ============================================================
-// PLACEHOLDER SCREENS (elaborated in Stage 4)
-// ============================================================
-class TarotDrawScreen extends StatelessWidget {
-  const TarotDrawScreen({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: AppTheme.midnightBlue,
-        appBar: AppBar(
-            backgroundColor: Colors.transparent, title: const Text('Tarot')),
-        body: const Center(child: Text('Tarot Draw — Stage 4')),
-      );
 }
 
 class ErrorScreen extends StatelessWidget {
