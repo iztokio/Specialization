@@ -10,6 +10,10 @@ import '../../features/subscription/data/datasources/subscription_remote_datasou
 import '../../features/subscription/data/repositories/subscription_repository_impl.dart';
 import '../../features/subscription/domain/entities/subscription_status.dart';
 import '../../features/subscription/domain/repositories/subscription_repository.dart';
+import '../../features/tarot/data/datasources/tarot_remote_datasource.dart';
+import '../../features/tarot/data/repositories/tarot_repository_impl.dart';
+import '../../features/tarot/domain/entities/tarot_card.dart';
+import '../../features/tarot/domain/repositories/tarot_repository.dart';
 import '../../features/today/data/datasources/horoscope_remote_datasource.dart';
 import '../../features/today/data/repositories/horoscope_repository_impl.dart';
 import '../../features/today/domain/entities/daily_reading.dart';
@@ -46,6 +50,13 @@ final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
   return SubscriptionRepositoryImpl(
     ref.watch(appDatabaseProvider),
     remote: ref.watch(subscriptionRemoteDatasourceProvider),
+  );
+});
+
+final tarotRepositoryProvider = Provider<TarotRepository>((ref) {
+  return TarotRepositoryImpl(
+    ref.watch(appDatabaseProvider),
+    remote: ref.watch(tarotRemoteDatasourceProvider),
   );
 });
 
@@ -136,4 +147,35 @@ final appThemeModeProvider = Provider<String>((ref) {
 /// Current app language from user profile.
 final appLanguageProvider = Provider<String>((ref) {
   return ref.watch(userProfileProvider).valueOrNull?.preferredLanguage ?? 'en';
+});
+
+// ─── Tarot ─────────────────────────────────────────────────────────────────
+
+/// Today's daily card for the current user.
+/// Deterministic: same result every time for same user+date+zodiac.
+final dailyCardProvider = FutureProvider<TarotCard?>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  final zodiacSign = ref.watch(currentZodiacSignProvider);
+  if (userId == null) return null;
+
+  return ref.watch(tarotRepositoryProvider).getDailyCard(
+    userId: userId,
+    zodiacSign: zodiacSign,
+    date: DateTime.now(),
+  );
+});
+
+/// 3-card spread for current user (premium).
+/// Deterministic: same result every time for same user+date+zodiac.
+/// Call only when [hasPremiumAccessProvider] is true.
+final threeCardSpreadProvider = FutureProvider<List<TarotCard>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  final zodiacSign = ref.watch(currentZodiacSignProvider);
+  if (userId == null) return [];
+
+  return ref.watch(tarotRepositoryProvider).getThreeCardSpread(
+    userId: userId,
+    zodiacSign: zodiacSign,
+    date: DateTime.now(),
+  );
 });
