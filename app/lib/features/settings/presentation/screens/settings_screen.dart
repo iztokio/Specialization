@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers/core_providers.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/notification_service.dart';
 
 /// Settings screen — language, notifications, theme, legal, account.
 ///
@@ -163,9 +165,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       backgroundColor: const Color(0xFF1A1040),
       builder: (ctx) => _LanguagePicker(
-        onSelected: (lang) {
-          // TODO(stage3): Update profile language
+        onSelected: (lang) async {
           Navigator.pop(ctx);
+          final profile = ref.read(userProfileProvider).valueOrNull;
+          if (profile == null || profile.preferredLanguage == lang) return;
+
+          await ref
+              .read(userProfileRepositoryProvider)
+              .updateProfile(profile.copyWith(preferredLanguage: lang));
+
+          // Refresh profile + today's reading (content may change by language)
+          ref.invalidate(userProfileProvider);
+          ref.invalidate(todayReadingProvider);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Language updated to ${_languageLabel(lang)}'),
+              backgroundColor: const Color(0xFF1A1040),
+            ));
+          }
         },
       ),
     );
@@ -182,7 +200,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final picked = await showTimePicker(context: context, initialTime: initial);
     if (picked == null || !mounted) return;
 
-    // TODO(stage3): Update profile notificationTime + reschedule notification
+    final h = picked.hour.toString().padLeft(2, '0');
+    final m = picked.minute.toString().padLeft(2, '0');
+    final newTime = '$h:$m';
+
+    final currentProfile = ref.read(userProfileProvider).valueOrNull;
+    if (currentProfile == null || currentProfile.notificationTime == newTime) {
+      return;
+    }
+
+    await ref
+        .read(userProfileRepositoryProvider)
+        .updateProfile(currentProfile.copyWith(notificationTime: newTime));
+
+    ref.invalidate(userProfileProvider);
+
+    // Reschedule daily notification at the new time
+    await ref.read(notificationServiceProvider).scheduleDailyNotification(
+      notificationTitle: '✨ Your Daily Reading is Ready',
+      notificationBody:
+          'Your horoscope and card of the day await. Tap to reveal.',
+      time: newTime,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Daily reminder set for $newTime'),
+        backgroundColor: const Color(0xFF1A1040),
+      ));
+    }
   }
 
   void _showDisclaimer(BuildContext context) {
@@ -247,9 +293,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: const Text('Cancel', style: TextStyle(color: Color(0xFF6B6490))),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              // TODO(stage3): ref.read(userProfileRepositoryProvider).deleteAllData(userId)
+              final userId = ref.read(currentUserIdProvider);
+              if (userId == null) return;
+
+              try {
+                // 1. Cancel scheduled notifications
+                await ref
+                    .read(notificationServiceProvider)
+                    .cancelDailyNotification();
+
+                // 2. Delete all local + Firestore data
+                await ref
+                    .read(userProfileRepositoryProvider)
+                    .deleteAllData(userId);
+
+                // 3. Delete Firebase Auth account
+                await ref.read(authServiceProvider).deleteAccount();
+
+                // 4. Reset all providers — router redirect handles navigation
+                ref.invalidate(userProfileProvider);
+                ref.invalidate(todayReadingProvider);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('Failed to delete account. Try again.'),
+                    backgroundColor: const Color(0xFFEF4444),
+                  ));
+                }
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444))),
           ),
