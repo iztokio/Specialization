@@ -64,6 +64,10 @@
             <span class="metric-label">Sharpe</span>
             <span class="metric-value" id="mSharpe">—</span>
         </div>
+        <div class="metric" id="mWalletMetric" style="display:none">
+            <span class="metric-label">Wallet USDC</span>
+            <span class="metric-value" id="mWalletBalance">—</span>
+        </div>
     </div>
 
     <!-- ═══ MAIN GRID ═══ -->
@@ -286,7 +290,7 @@
                     <div class="wallet-info">
                         <p>Connect your Polygon wallet to trade on Polymarket with real funds.</p>
                         <p class="dim" style="margin-top:8px">Network: <strong>Polygon Mainnet</strong> (Chain ID: 137)</p>
-                        <p class="dim">Currency: <strong>USDC</strong> + MATIC for gas</p>
+                        <p class="dim">Currency: <strong>USDC</strong> + POL for gas</p>
                     </div>
 
                     <div class="wallet-options">
@@ -355,7 +359,7 @@
                                 <span class="status-value" id="wBalance">checking...</span>
                             </div>
                             <div class="status-row">
-                                <span class="status-label">MATIC (gas)</span>
+                                <span class="status-label">POL (gas)</span>
                                 <span class="status-value" id="wMatic">checking...</span>
                             </div>
                             <div class="status-row">
@@ -370,6 +374,7 @@
 
                         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
                             <button class="btn btn-success" onclick="switchToLive()">Switch to LIVE Mode</button>
+                            <button class="btn btn-secondary" onclick="refreshBalance()">Refresh Balance</button>
                             <button class="btn btn-secondary" onclick="disconnectWallet()">Disconnect</button>
                             <button class="btn btn-secondary" onclick="closeWallet()">Close</button>
                         </div>
@@ -395,7 +400,7 @@
                             </div>
                         </div>
                         <p class="dim" style="margin-top:12px">
-                            To use this wallet, send USDC + MATIC on <strong>Polygon network</strong> to the address above.
+                            To use this wallet, send USDC + POL on <strong>Polygon network</strong> to the address above.
                         </p>
                         <div style="margin-top:16px;display:flex;gap:8px">
                             <button class="btn btn-success" onclick="useGeneratedWallet()">Use This Wallet</button>

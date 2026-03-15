@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from eth_account import Account
 
 from config.settings import Settings
+from execution.wallet_balance import fetch_balances
 from engine.arbitrage import ArbitrageEngine
 from monitoring.logger import TrainingStream, get_logger
 
@@ -230,7 +231,16 @@ def wallet_connect():
             pk = "0x" + pk
 
         acct = Account.from_key(pk)
-        wallet_state = {"address": acct.address, "private_key": pk}
+
+        # Fetch real balances from Polygon
+        balances = fetch_balances(acct.address)
+
+        wallet_state = {
+            "address": acct.address,
+            "private_key": pk,
+            "usdc_balance": balances["total_usdc"],
+            "pol_balance": balances["pol_balance"],
+        }
 
         os.environ["PRIVATE_KEY"] = pk
 
@@ -238,13 +248,25 @@ def wallet_connect():
         if funder:
             os.environ["POLYMARKET_FUNDER"] = funder
 
-        logger.info(f"Wallet connected: {acct.address[:10]}...")
+        logger.info(f"Wallet connected: {acct.address[:10]}... USDC=${balances['total_usdc']:.2f}")
+
+        usdc_str = f"${balances['total_usdc']:.2f}"
+        if balances["usdce_balance"] > 0:
+            usdc_str += f" (USDC: ${balances['usdc_balance']:.2f} + USDC.e: ${balances['usdce_balance']:.2f})"
+        if balances["error"]:
+            usdc_str = f"RPC error: {balances['error']}"
+
+        pol_str = f"{balances['pol_balance']:.4f} POL"
+        if balances["error"]:
+            pol_str = "N/A"
 
         return jsonify({
             "status": "ok",
             "address": acct.address,
-            "usdc_balance": "Check on Polygon",
-            "matic_balance": "Check on Polygon",
+            "usdc_balance": usdc_str,
+            "usdc_raw": balances["total_usdc"],
+            "matic_balance": pol_str,
+            "pol_raw": balances["pol_balance"],
             "allowance": "Will be set on first trade",
             "api_keys": False,
         })
@@ -263,6 +285,24 @@ def wallet_generate():
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/wallet/balance", methods=["GET"])
+def wallet_balance():
+    """Refresh wallet balances from Polygon."""
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    balances = fetch_balances(wallet_state["address"])
+    wallet_state["usdc_balance"] = balances["total_usdc"]
+    wallet_state["pol_balance"] = balances["pol_balance"]
+    return jsonify({
+        "status": "ok",
+        "usdc_balance": balances["total_usdc"],
+        "usdce_balance": balances["usdce_balance"],
+        "pol_balance": balances["pol_balance"],
+        "total_usdc": balances["total_usdc"],
+        "error": balances["error"],
+    })
 
 
 @app.route("/api/wallet/disconnect", methods=["POST"])

@@ -406,6 +406,7 @@ function clearStream() {
 
 // ── Wallet Connection ───────────────────────────────────────
 let walletConnected = false;
+let walletUsdcBalance = 0;
 
 function openWallet() {
     document.getElementById('walletModal').classList.add('active');
@@ -506,41 +507,99 @@ async function useGeneratedWallet() {
 
 function onWalletConnected(data) {
     walletConnected = true;
+    walletUsdcBalance = data.usdc_raw || 0;
     showWalletStep(3);
 
     setText('wAddress', data.address || '—');
-    setText('wBalance', data.usdc_balance || 'N/A (connect to Polygon to check)');
+    setText('wBalance', data.usdc_balance || 'N/A');
     setText('wMatic', data.matic_balance || 'N/A');
     setText('wAllowance', data.allowance || 'Will be set on first trade');
     setText('wApiKeys', data.api_keys ? 'Configured' : 'Will auto-generate');
 
-    // Update header button
+    // Update header button with balance
     const btn = document.getElementById('btnWallet');
     btn.classList.add('connected');
     const addr = data.address || '';
+    const balStr = walletUsdcBalance > 0 ? ' ($' + walletUsdcBalance.toFixed(2) + ')' : '';
     document.getElementById('walletLabel').textContent =
-        addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : 'Connected';
+        addr ? addr.slice(0, 6) + '...' + addr.slice(-4) + balStr : 'Connected';
     document.getElementById('walletIcon').textContent = '\u2705';
+
+    // Auto-set bankroll from wallet balance if it's set and less than default
+    if (walletUsdcBalance > 0) {
+        const cfgBankroll = document.getElementById('cfgBankroll');
+        const currentBankroll = parseFloat(cfgBankroll.value);
+        if (walletUsdcBalance < currentBankroll) {
+            cfgBankroll.value = Math.floor(walletUsdcBalance * 100) / 100;
+            // Also adjust max position to be proportional
+            const cfgMaxPos = document.getElementById('cfgMaxPosition');
+            cfgMaxPos.value = Math.floor(walletUsdcBalance * 0.5 * 100) / 100;
+        }
+    }
+
+    // Show wallet balance in metrics bar
+    if (walletUsdcBalance > 0) {
+        const walletMetric = document.getElementById('mWalletMetric');
+        if (walletMetric) walletMetric.style.display = '';
+        setText('mWalletBalance', '$' + num(walletUsdcBalance));
+    }
 
     addStreamEntry({
         timestamp: Date.now() / 1000,
         tag: 'WALLET',
-        message: 'Connected: ' + (addr ? addr.slice(0, 10) + '...' : 'OK'),
+        message: 'Connected: ' + (addr ? addr.slice(0, 10) + '...' : 'OK') +
+            (walletUsdcBalance > 0 ? ' | USDC: $' + walletUsdcBalance.toFixed(2) : ''),
     });
+}
+
+async function refreshBalance() {
+    setText('wBalance', 'refreshing...');
+    setText('wMatic', 'refreshing...');
+    try {
+        const resp = await fetch('/api/wallet/balance');
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            walletUsdcBalance = data.total_usdc || 0;
+            let usdcStr = '$' + walletUsdcBalance.toFixed(2);
+            if (data.usdce_balance > 0) {
+                usdcStr += ' (USDC: $' + (data.usdc_balance || 0).toFixed(2) + ' + USDC.e: $' + data.usdce_balance.toFixed(2) + ')';
+            }
+            setText('wBalance', usdcStr);
+            setText('wMatic', (data.pol_balance || 0).toFixed(4) + ' POL');
+
+            // Update header
+            const addr = document.getElementById('wAddress').textContent;
+            if (addr && addr !== '—') {
+                document.getElementById('walletLabel').textContent =
+                    addr.slice(0, 6) + '...' + addr.slice(-4) + ' ($' + walletUsdcBalance.toFixed(2) + ')';
+            }
+        } else {
+            setText('wBalance', 'Error: ' + (data.error || 'unknown'));
+        }
+    } catch (e) {
+        setText('wBalance', 'Fetch failed');
+    }
 }
 
 async function switchToLive() {
     if (!confirm(
         'Switch to LIVE trading mode?\n\n' +
         'This will use REAL MONEY from your connected wallet.\n' +
-        'Make sure you understand the risks.'
+        'Make sure you understand the risks.\n\n' +
+        (walletUsdcBalance > 0 ? 'Wallet balance: $' + walletUsdcBalance.toFixed(2) + ' USDC' : '')
     )) return;
 
     try {
+        // Auto-set bankroll to wallet balance for live mode
+        const cfg = { trading_mode: 'live' };
+        if (walletUsdcBalance > 0) {
+            cfg.initial_bankroll = walletUsdcBalance;
+            cfg.max_position_size = Math.floor(walletUsdcBalance * 0.5 * 100) / 100;
+        }
         await fetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trading_mode: 'live' }),
+            body: JSON.stringify(cfg),
         });
         const badge = document.getElementById('modeBadge');
         badge.textContent = 'LIVE';
@@ -549,7 +608,7 @@ async function switchToLive() {
         addStreamEntry({
             timestamp: Date.now() / 1000,
             tag: 'CONFIG',
-            message: 'Switched to LIVE trading mode',
+            message: 'Switched to LIVE mode | Bankroll: $' + (walletUsdcBalance > 0 ? walletUsdcBalance.toFixed(2) : '?'),
         });
     } catch (e) {
         alert('Error: ' + e);
@@ -558,10 +617,13 @@ async function switchToLive() {
 
 function disconnectWallet() {
     walletConnected = false;
+    walletUsdcBalance = 0;
     const btn = document.getElementById('btnWallet');
     btn.classList.remove('connected');
     document.getElementById('walletLabel').textContent = 'Connect Wallet';
     document.getElementById('walletIcon').textContent = '\u26D3';
+    const walletMetric = document.getElementById('mWalletMetric');
+    if (walletMetric) walletMetric.style.display = 'none';
     showWalletStep(1);
     fetch('/api/wallet/disconnect', { method: 'POST' });
 }

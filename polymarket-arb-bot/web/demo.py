@@ -28,6 +28,7 @@ from flask_socketio import SocketIO, emit
 from eth_account import Account
 
 from config.settings import Settings
+from execution.wallet_balance import fetch_balances
 from execution.order_manager import OrderManager, Order, OrderStatus
 from execution.stoikov import StoikovQuoter
 from execution.hedge import HedgeManager
@@ -279,7 +280,8 @@ class DemoEngine:
             book=book,
         )
         position_size = min(kelly_result.position_size, impact.recommended_size)
-        if position_size < 1.0:
+        # Allow tiny trades for small bankrolls (min $0.10)
+        if position_size < 0.10:
             return
 
         # 8. Stoikov quote
@@ -394,6 +396,25 @@ def get_config():
 
 @app.route("/api/config", methods=["POST"])
 def update_config():
+    data = request.json or {}
+    if engine is not None:
+        # Update running engine settings
+        if "initial_bankroll" in data:
+            engine.bankroll = float(data["initial_bankroll"])
+            engine.initial_bankroll = float(data["initial_bankroll"])
+            engine.peak_bankroll = max(engine.peak_bankroll, engine.bankroll)
+        if "kelly_fraction" in data:
+            engine.kelly = KellySizer(
+                fraction=float(data["kelly_fraction"]),
+                max_fraction=0.05,
+                max_absolute=float(data.get("max_position_size", engine.settings.max_position_size)),
+            )
+        if "gamma_risk" in data:
+            engine.stoikov = StoikovQuoter(
+                gamma=float(data["gamma_risk"]),
+                max_inventory=float(data.get("max_inventory", engine.settings.max_inventory)),
+            )
+    logger.info(f"Config updated: {list(data.keys())}")
     return jsonify({"status": "ok"})
 
 
@@ -490,7 +511,6 @@ def wallet_connect():
 
     try:
         if data.get("source") == "env":
-            # Load from .env / environment
             pk = os.environ.get("PRIVATE_KEY", "")
             if not pk or pk == "your_polygon_private_key_here":
                 return jsonify({"status": "error", "error": "No PRIVATE_KEY in .env"}), 400
@@ -500,27 +520,46 @@ def wallet_connect():
         if not pk:
             return jsonify({"status": "error", "error": "No private key provided"}), 400
 
-        # Normalize key
         if not pk.startswith("0x"):
             pk = "0x" + pk
 
         acct = Account.from_key(pk)
-        wallet_state = {"address": acct.address, "private_key": pk}
 
-        # Update env for live mode
+        # Fetch real balances from Polygon
+        balances = fetch_balances(acct.address)
+
+        wallet_state = {
+            "address": acct.address,
+            "private_key": pk,
+            "usdc_balance": balances["total_usdc"],
+            "pol_balance": balances["pol_balance"],
+        }
+
         os.environ["PRIVATE_KEY"] = pk
 
         funder = data.get("funder")
         if funder:
             os.environ["POLYMARKET_FUNDER"] = funder
 
-        logger.info(f"Wallet connected: {acct.address[:10]}...")
+        logger.info(f"Wallet connected: {acct.address[:10]}... USDC=${balances['total_usdc']:.2f} POL={balances['pol_balance']:.4f}")
+
+        usdc_str = f"${balances['total_usdc']:.2f}"
+        if balances["usdce_balance"] > 0:
+            usdc_str += f" (USDC: ${balances['usdc_balance']:.2f} + USDC.e: ${balances['usdce_balance']:.2f})"
+        if balances["error"]:
+            usdc_str = f"RPC error: {balances['error']}"
+
+        pol_str = f"{balances['pol_balance']:.4f} POL"
+        if balances["error"]:
+            pol_str = "N/A"
 
         return jsonify({
             "status": "ok",
             "address": acct.address,
-            "usdc_balance": "Check on Polygon",
-            "matic_balance": "Check on Polygon",
+            "usdc_balance": usdc_str,
+            "usdc_raw": balances["total_usdc"],
+            "matic_balance": pol_str,
+            "pol_raw": balances["pol_balance"],
             "allowance": "Will be set on first trade",
             "api_keys": False,
         })
@@ -539,6 +578,24 @@ def wallet_generate():
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/wallet/balance", methods=["GET"])
+def wallet_balance():
+    """Refresh wallet balances from Polygon."""
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    balances = fetch_balances(wallet_state["address"])
+    wallet_state["usdc_balance"] = balances["total_usdc"]
+    wallet_state["pol_balance"] = balances["pol_balance"]
+    return jsonify({
+        "status": "ok",
+        "usdc_balance": balances["total_usdc"],
+        "usdce_balance": balances["usdce_balance"],
+        "pol_balance": balances["pol_balance"],
+        "total_usdc": balances["total_usdc"],
+        "error": balances["error"],
+    })
 
 
 @app.route("/api/wallet/disconnect", methods=["POST"])
