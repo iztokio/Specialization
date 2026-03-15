@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARB ENGINE // 5-MIN BTC</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- ═══ HEADER ═══ -->
+    <header class="header">
+        <div class="header-left">
+            <h1 class="logo">ARB ENGINE <span class="dim">// 5-MIN BTC MARKETS</span></h1>
+        </div>
+        <div class="header-center">
+            <span class="mode-badge" id="modeBadge">PAPER</span>
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Offline</span>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-success" id="btnStart" onclick="startEngine()">Start</button>
+            <button class="btn btn-danger" id="btnStop" onclick="stopEngine()" disabled>Stop</button>
+            <button class="btn btn-secondary" onclick="openSettings()">Settings</button>
+        </div>
+    </header>
+
+    <!-- ═══ MAIN METRICS BAR ═══ -->
+    <div class="metrics-bar">
+        <div class="metric">
+            <span class="metric-label">Balance</span>
+            <span class="metric-value" id="mBalance">$0.00</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">P&L</span>
+            <span class="metric-value pnl-positive" id="mPnl">$0.00</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">ROI</span>
+            <span class="metric-value" id="mRoi">0.0%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Win Rate</span>
+            <span class="metric-value" id="mWinRate">0.0%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Trades/hr</span>
+            <span class="metric-value" id="mTradesHr">0</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Total Trades</span>
+            <span class="metric-value" id="mTotalTrades">0</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Max Drawdown</span>
+            <span class="metric-value" id="mDrawdown">0.0%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Sharpe</span>
+            <span class="metric-value" id="mSharpe">—</span>
+        </div>
+    </div>
+
+    <!-- ═══ MAIN GRID ═══ -->
+    <div class="main-grid">
+        <!-- LEFT: P&L Chart -->
+        <div class="panel chart-panel">
+            <div class="panel-header">
+                <h2>P&L CURVE</h2>
+                <span class="panel-badge" id="chartBankroll">$0</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+
+        <!-- RIGHT TOP: Module Status -->
+        <div class="panel status-panel">
+            <div class="panel-header"><h2>SYSTEM STATUS</h2></div>
+            <div class="status-grid" id="statusGrid">
+                <div class="status-row">
+                    <span class="status-label">Binance</span>
+                    <span class="status-value offline" id="sBinance">OFFLINE</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Coinbase</span>
+                    <span class="status-value offline" id="sCoinbase">OFFLINE</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">BTC Price</span>
+                    <span class="status-value" id="sBtcPrice">—</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Bayesian</span>
+                    <span class="status-value" id="sBayes">post=0.500</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Volatility</span>
+                    <span class="status-value" id="sVol">warming...</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Stoikov</span>
+                    <span class="status-value" id="sStoikov">q=0.0</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Hedge</span>
+                    <span class="status-value" id="sHedge">net=$0</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Circuit</span>
+                    <span class="status-value online" id="sCircuit">OK</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Active Orders</span>
+                    <span class="status-value" id="sOrders">0</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Signals</span>
+                    <span class="status-value" id="sSignals">0 / 0 rejected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM LEFT: Training Stream -->
+        <div class="panel stream-panel">
+            <div class="panel-header">
+                <h2>TRAINING STREAM</h2>
+                <button class="btn btn-sm" onclick="clearStream()">Clear</button>
+            </div>
+            <div class="stream-container" id="streamContainer">
+                <div class="stream-entry dim">Waiting for engine start...</div>
+            </div>
+        </div>
+
+        <!-- BOTTOM RIGHT: Orders -->
+        <div class="panel orders-panel">
+            <div class="panel-header">
+                <h2>ORDERS</h2>
+                <button class="btn btn-sm btn-danger" onclick="cancelAllOrders()">Cancel All</button>
+            </div>
+            <div class="orders-container">
+                <div class="orders-section">
+                    <h3>Active</h3>
+                    <table class="orders-table" id="activeOrdersTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Side</th>
+                                <th>Price</th>
+                                <th>Size</th>
+                                <th>Age</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activeOrdersBody">
+                            <tr><td colspan="5" class="dim">No active orders</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="orders-section">
+                    <h3>Recent Fills</h3>
+                    <table class="orders-table" id="fillsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Side</th>
+                                <th>Price</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fillsBody">
+                            <tr><td colspan="5" class="dim">No fills yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SETTINGS MODAL ═══ -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Bot Configuration</h2>
+                <button class="btn-close" onclick="closeSettings()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-grid">
+                    <div class="settings-section">
+                        <h3>Trading</h3>
+                        <div class="field">
+                            <label>Mode</label>
+                            <select id="cfgMode">
+                                <option value="paper">Paper (Simulation)</option>
+                                <option value="live">Live (Real Money)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Initial Bankroll ($)</label>
+                            <input type="number" id="cfgBankroll" value="2050" step="100">
+                        </div>
+                        <div class="field">
+                            <label>Max Position Size ($)</label>
+                            <input type="number" id="cfgMaxPosition" value="5000" step="100">
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Signal Parameters</h3>
+                        <div class="field">
+                            <label>Z-Score Threshold</label>
+                            <input type="number" id="cfgZThreshold" value="2.0" step="0.1">
+                        </div>
+                        <div class="field">
+                            <label>Min Net EV</label>
+                            <input type="number" id="cfgMinEv" value="0.003" step="0.001">
+                        </div>
+                        <div class="field">
+                            <label>Kelly Fraction</label>
+                            <input type="number" id="cfgKelly" value="0.5" step="0.05" min="0.1" max="1.0">
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Execution</h3>
+                        <div class="field">
+                            <label>Gamma (Risk Aversion)</label>
+                            <input type="number" id="cfgGamma" value="0.18" step="0.01">
+                        </div>
+                        <div class="field">
+                            <label>Max Inventory</label>
+                            <input type="number" id="cfgMaxInventory" value="3.0" step="0.5">
+                        </div>
+                        <div class="field">
+                            <label>Order TTL (seconds)</label>
+                            <input type="number" id="cfgOrderTtl" value="15" step="1">
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Circuit Breakers</h3>
+                        <div class="field">
+                            <label>
+                                <input type="checkbox" id="cfgCircuitEnabled" checked>
+                                Enable Circuit Breakers
+                            </label>
+                        </div>
+                        <div class="field">
+                            <label>Max Drawdown (%)</label>
+                            <input type="number" id="cfgMaxDrawdown" value="20" step="1" min="5" max="50">
+                        </div>
+                        <div class="field">
+                            <label>Max Consecutive Losses</label>
+                            <input type="number" id="cfgMaxLosses" value="15" step="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-warning" id="liveWarning" style="display:none">
+                    &#9888; LIVE MODE uses real money. Make sure your wallet is connected
+                    and you understand the risks.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn btn-success" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
