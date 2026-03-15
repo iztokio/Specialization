@@ -20,4 +20,4 @@ services:
     #   Demo (simulated):  python web/demo.py
     #   Paper (real feeds): python web/app.py
     #   Live trading:       python web/app.py  (+ set TRADING_MODE=live in .env)
-    command: python web/demo.py
+    command: python web/app.py

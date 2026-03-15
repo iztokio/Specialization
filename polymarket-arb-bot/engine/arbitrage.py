@@ -20,7 +20,7 @@ from typing import Optional
 
 from config.settings import Settings
 from execution.hedge import HedgeManager
-from execution.order_manager import OrderManager, Order, OrderStatus
+from execution.order_manager import OrderManager, Order, OrderStatus, OrderSide
 from execution.stoikov import StoikovQuoter
 from feeds.binance_feed import BinanceFeed
 from feeds.coinbase_feed import CoinbaseFeed
@@ -281,6 +281,12 @@ class ArbitrageEngine:
                     await asyncio.sleep(self.settings.poll_interval)
                     continue
 
+                # ── Check for expired/resolved markets ─────
+                expired = [m for m in self._active_markets if m.seconds_to_expiry <= 0]
+                for market in expired:
+                    await self._check_market_resolution(market)
+                    self._active_markets.remove(market)
+
                 # ── Evaluate each active market ──────────────
                 for market in self._active_markets:
                     if market.seconds_to_expiry < 10:
@@ -413,6 +419,34 @@ class ArbitrageEngine:
             net_ev=edge.net_ev,
         )
 
+    # ── Market Resolution ────────────────────────────────────
+
+    async def _check_market_resolution(self, market: Market):
+        """Check if a market has resolved and update P&L accordingly."""
+        try:
+            # Fetch final outcome from Polymarket
+            resp = await self.polymarket._client.get(
+                f"{self.polymarket.gamma_url}/markets/{market.condition_id}",
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                resolved = data.get("resolved", False)
+                if resolved:
+                    outcome = data.get("outcome", "")
+                    self.on_market_resolved(market.yes_token_id, outcome)
+                else:
+                    # Market expired but not yet resolved; check prices
+                    # If YES price > 0.95, likely resolves YES
+                    book = await self.polymarket.get_orderbook(market.yes_token_id)
+                    if book.mid_price > 0.95:
+                        self.on_market_resolved(market.yes_token_id, "YES")
+                    elif book.mid_price < 0.05:
+                        self.on_market_resolved(market.yes_token_id, "NO")
+                    else:
+                        stream.log("RESOLVE", f"Market {market.condition_id[:8]} expired, awaiting resolution")
+        except Exception:
+            logger.exception(f"Failed to check resolution for {market.condition_id[:8]}")
+
     # ── Hedge Execution ──────────────────────────────────────
 
     async def _execute_hedge(self, hedge_state):
@@ -444,7 +478,12 @@ class ArbitrageEngine:
     # ── Fill Callback ────────────────────────────────────────
 
     def _on_fill(self, order: Order):
-        """Called when an order is filled."""
+        """Called when an order is filled.
+
+        In live mode, P&L is only realized when the 5-min market resolves.
+        We track the cost of the position here and update bankroll on resolution.
+        In paper mode, we simulate fill cost deduction.
+        """
         self.stats.total_trades += 1
 
         # Update Stoikov inventory
@@ -453,15 +492,19 @@ class ArbitrageEngine:
         # Update hedge tracker
         self.hedge.on_fill(order.side.value, order.size)
 
-        # Estimate P&L (simplified: will be accurate on market resolution)
-        # For now, use edge as proxy for expected profit
-        expected_profit = order.size * 0.05  # ~5% edge assumption
-        self.stats.total_pnl += expected_profit
-        self.stats.bankroll += expected_profit
+        # Deduct the cost of buying the position from bankroll
+        # When buying YES at price P for size S USDC, we spend S USDC
+        # If market resolves YES, we get back S / P USDC (payout = 1/price per share)
+        # If market resolves NO, we lose the S USDC
+        cost = order.filled_size if order.filled_size > 0 else order.size
+        self.stats.bankroll -= cost
 
-        # Track wins (assume positive edge = win for now)
-        self.stats.wins += 1
-        self.stats.consecutive_losses = 0
+        stream.log(
+            "FILL",
+            f"{order.side.value} ${cost:.2f} @ {order.filled_price:.3f} | bankroll=${self.stats.bankroll:.2f}",
+            order_id=order.id,
+            cost=round(cost, 2),
+        )
 
         # Update peak
         if self.stats.bankroll > self.stats.peak_bankroll:
@@ -478,9 +521,48 @@ class ArbitrageEngine:
         """
         Called when a 5-min market resolves.
 
-        In production, this would check our positions and update
-        bankroll with actual P&L.
+        Checks filled orders for this market and updates bankroll
+        with actual realized P&L.
         """
+        # Find all filled orders for this market
+        for order in self.order_manager.get_recent_fills(100):
+            if order.token_id != market_id:
+                continue
+
+            fill_price = order.filled_price
+            fill_size = order.filled_size if order.filled_size > 0 else order.size
+
+            # Payout: if outcome matches our side, we get $1 per share
+            # Shares bought = fill_size / fill_price
+            shares = fill_size / fill_price if fill_price > 0 else 0
+
+            is_yes_token = (order.token_id == market_id)  # simplified check
+            won = (outcome.upper() == "YES" and order.side == OrderSide.BUY)
+
+            if won:
+                # Payout = shares * $1.00; we already deducted fill_size
+                payout = shares
+                profit = payout - fill_size
+                self.stats.total_pnl += profit
+                self.stats.bankroll += payout  # return principal + profit
+                self.stats.wins += 1
+                self.stats.consecutive_losses = 0
+                stream.log("RESOLVE", f"WIN +${profit:.2f} | {market_id[:8]} → {outcome}")
+            else:
+                # We already deducted the cost on fill; position is now worthless
+                loss = fill_size
+                self.stats.total_pnl -= loss
+                self.stats.losses += 1
+                self.stats.consecutive_losses += 1
+                stream.log("RESOLVE", f"LOSS -${loss:.2f} | {market_id[:8]} → {outcome}")
+
+        # Update peak / drawdown after resolution
+        if self.stats.bankroll > self.stats.peak_bankroll:
+            self.stats.peak_bankroll = self.stats.bankroll
+        dd = self.stats.current_drawdown
+        if dd > self.stats.max_drawdown:
+            self.stats.max_drawdown = dd
+
         # Reset per-market state
         self.bayesian.reset()
         self.stoikov.on_expiry()

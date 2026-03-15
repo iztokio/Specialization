@@ -182,6 +182,11 @@ function updateStats(data) {
 function updateModuleStatus(data) {
     setStatus('sBinance', data.binance_connected);
     setStatus('sCoinbase', data.coinbase_connected);
+    setStatus('sPolymarket', data.polymarket_connected);
+    if (data.polymarket_connected) {
+        const el = document.getElementById('sPolymarket');
+        if (el) el.textContent = 'ONLINE (' + (data.polymarket_markets || 0) + ' markets)';
+    }
 
     setText('sBtcPrice', data.binance_price ? '$' + num(data.binance_price, 0) : '—');
     setText('sBayes', 'post=' + (data.bayesian_posterior || 0).toFixed(3));
@@ -202,8 +207,16 @@ function updateModuleStatus(data) {
 
     // Update mode badge
     const badge = document.getElementById('modeBadge');
-    badge.textContent = data.trading_mode.toUpperCase();
+    const mode = (data.trading_mode || 'paper').toUpperCase();
+    badge.textContent = mode;
     badge.className = 'mode-badge' + (data.trading_mode === 'live' ? ' live' : '');
+
+    // Show CLOB connection status for live mode
+    if (data.trading_mode === 'live' && data.clob_connected === false) {
+        const circuitEl = document.getElementById('sCircuit');
+        circuitEl.textContent = 'CLOB NOT CONNECTED';
+        circuitEl.className = 'status-value offline';
+    }
 }
 
 function updateOrders(data) {

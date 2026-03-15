@@ -106,6 +106,15 @@ def update_config():
             except (ValueError, TypeError):
                 pass
 
+    # If switching to live mode, validate wallet is connected
+    if data.get("trading_mode") == "live":
+        pk = os.environ.get("PRIVATE_KEY", s.private_key)
+        has_wallet = wallet_state and wallet_state.get("private_key")
+        if (not pk or pk in ("", "your_polygon_wallet_private_key")) and not has_wallet:
+            return jsonify({"error": "Connect wallet before switching to LIVE mode"}), 400
+        # Set environment for next engine start
+        os.environ["TRADING_MODE"] = "live"
+
     settings = s
     logger.info(f"Config updated: {list(data.keys())}")
     return jsonify({"status": "ok"})
@@ -193,10 +202,13 @@ def get_pnl_history():
 def get_module_status():
     if engine is None:
         return jsonify({"running": False})
+    polymarket_connected = engine.polymarket._client is not None and len(engine._active_markets) > 0
     return jsonify({
         "running": True,
         "binance_connected": engine.binance.connected,
         "coinbase_connected": engine.coinbase.connected,
+        "polymarket_connected": polymarket_connected,
+        "polymarket_markets": len(engine._active_markets),
         "binance_price": engine.binance.last_price,
         "bayesian_posterior": round(engine.bayesian.posterior, 4),
         "volatility": round(engine.volatility.current, 8) if engine.volatility.current else None,
@@ -206,6 +218,7 @@ def get_module_status():
         "circuit_reason": engine.circuit.reason if engine.circuit.is_tripped else "",
         "active_orders": engine.order_manager.active_count,
         "trading_mode": engine.settings.trading_mode,
+        "clob_connected": engine.order_manager.clob_client is not None if engine.settings.trading_mode == "live" else None,
     })
 
 
@@ -329,7 +342,53 @@ def on_start_engine(data=None):
         return
 
     s = get_or_create_settings()
+
+    # If wallet is connected and bankroll is default, use wallet balance
+    if wallet_state and wallet_state.get("usdc_balance", 0) > 0:
+        real_balance = wallet_state["usdc_balance"]
+        if s.initial_bankroll > real_balance or s.initial_bankroll == 2050.0:
+            s.initial_bankroll = real_balance
+            s.max_position_size = min(s.max_position_size, real_balance * 0.5)
+            logger.info(f"Bankroll set from wallet: ${real_balance:.2f}")
+
     engine = ArbitrageEngine(s)
+
+    # Initialize CLOB client for live mode
+    if s.trading_mode == "live":
+        pk = os.environ.get("PRIVATE_KEY", s.private_key)
+        if not pk or pk in ("", "your_polygon_wallet_private_key"):
+            if wallet_state and wallet_state.get("private_key"):
+                pk = wallet_state["private_key"]
+            else:
+                emit("engine_error", {"error": "No private key. Connect wallet first or set PRIVATE_KEY in .env"})
+                engine = None
+                return
+
+        try:
+            from py_clob_client.client import ClobClient
+
+            clob_client = ClobClient(
+                s.clob_url,
+                key=pk,
+                chain_id=s.chain_id,
+                signature_type=0,
+                funder=s.polymarket_funder or os.environ.get("POLYMARKET_FUNDER") or None,
+            )
+            clob_client.set_api_creds(
+                clob_client.create_or_derive_api_creds()
+            )
+            engine.order_manager.clob_client = clob_client
+            engine.order_manager.mode = "live"
+            logger.info("Polymarket CLOB client initialized for LIVE trading")
+        except ImportError:
+            emit("engine_error", {"error": "py-clob-client not installed. Run: pip install py-clob-client"})
+            engine = None
+            return
+        except Exception as e:
+            logger.exception("Failed to initialize CLOB client")
+            emit("engine_error", {"error": f"CLOB init failed: {e}"})
+            engine = None
+            return
 
     # Record P&L periodically
     original_on_fill = engine._on_fill
