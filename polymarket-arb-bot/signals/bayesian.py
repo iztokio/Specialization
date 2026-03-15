@@ -76,12 +76,16 @@ class BayesianSignal:
         vol = max(volatility, 1e-8)
 
         # ── Individual signals ─────────────────────────────────
-        # Spot momentum: normalize by volatility (z-score-like)
-        spot_z = spot_delta / (vol * 100)  # scale for typical BTC moves
-        spot_signal = self._sigmoid(spot_z * 3.0)  # steepen
+        # Spot momentum: normalize so typical BTC moves map to [-3, +3] range
+        # spot_delta is in USD; vol is fractional (e.g. 0.001 = 0.1%)
+        # For BTC ~$85k, vol=0.001: a $85 move = 1 sigma
+        typical_move = vol * 85_000  # approximate 1-sigma move in USD
+        spot_z = spot_delta / (typical_move + 1e-8)
+        spot_signal = self._sigmoid(spot_z * 1.5)
 
-        # Volatility regime: higher vol = more directional moves = signal stronger
-        vol_signal = min(vol / 0.005, 1.0)  # saturates at 0.5% per-tick vol
+        # Volatility regime: vol is non-directional, use 0.5 as neutral
+        # Only amplifies/dampens other signals, doesn't add directional bias
+        vol_signal = 0.5  # neutral — vol affects weights, not direction
 
         # Book imbalance: directly proportional
         book_signal = self._sigmoid(book_imbalance * 4.0)
@@ -167,4 +171,6 @@ class BayesianSignal:
 
     @staticmethod
     def _sigmoid(x: float) -> float:
+        # Clamp to avoid overflow in math.exp
+        x = max(-20.0, min(20.0, x))
         return 1.0 / (1.0 + math.exp(-x))

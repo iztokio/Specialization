@@ -42,6 +42,31 @@ from signals.volatility import VolatilityEstimator
 
 logger = get_logger("demo")
 
+
+def _fetch_btc_price() -> float:
+    """Try to fetch current BTC price from public APIs. Falls back to sensible default."""
+    import urllib.request
+    import json as _json
+
+    apis = [
+        ("https://api.coinbase.com/v2/prices/BTC-USD/spot", lambda d: float(d["data"]["amount"])),
+        ("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", lambda d: float(d["bitcoin"]["usd"])),
+        ("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", lambda d: float(d["price"])),
+    ]
+    for url, parser in apis:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ArbBot/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = _json.loads(resp.read())
+                price = parser(data)
+                if 10_000 < price < 500_000:
+                    logger.info(f"Fetched BTC price: ${price:,.0f} from {url.split('/')[2]}")
+                    return price
+        except Exception:
+            continue
+    logger.warning("Could not fetch live BTC price, using default $84,500")
+    return 84_500.0
+
 app = Flask(
     __name__,
     template_folder="templates",
@@ -58,13 +83,14 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 class SimulatedMarket:
     """Generates realistic BTC price movements using geometric Brownian motion."""
 
-    def __init__(self, initial_price: float = 87_500.0):
-        self.price = initial_price
-        self.mu = 0.0001       # slight upward drift
-        self.sigma = 0.0008    # per-tick volatility
+    def __init__(self, initial_price: float | None = None):
+        self.price = initial_price or _fetch_btc_price()
+        self.mu = 0.00005      # slight upward drift
+        self.sigma = 0.0006    # per-tick volatility (more realistic)
         self.tick_count = 0
         self._trend = 0.0
         self._trend_duration = 0
+        self._price_history: list[float] = [self.price]
 
     def tick(self) -> float:
         """Generate next price tick."""
@@ -72,8 +98,8 @@ class SimulatedMarket:
 
         # Occasionally shift trend (momentum regime)
         if self._trend_duration <= 0:
-            self._trend = random.gauss(0, 0.0003)
-            self._trend_duration = random.randint(20, 100)
+            self._trend = random.gauss(0, 0.0002)
+            self._trend_duration = random.randint(30, 120)
         self._trend_duration -= 1
 
         # Geometric Brownian Motion + trend
@@ -82,7 +108,19 @@ class SimulatedMarket:
         shock = self.sigma * random.gauss(0, 1) * math.sqrt(dt)
         self.price *= math.exp(drift + shock)
 
+        self._price_history.append(self.price)
+        if len(self._price_history) > 100:
+            self._price_history.pop(0)
+
         return self.price
+
+    @property
+    def spot_delta(self) -> float:
+        """Price change over last ~10 ticks (realistic spot delta)."""
+        if len(self._price_history) < 2:
+            return 0.0
+        lookback = min(10, len(self._price_history) - 1)
+        return self._price_history[-1] - self._price_history[-1 - lookback]
 
     def get_polymarket_book(self, fair_prob: float) -> OrderBook:
         """
@@ -91,12 +129,12 @@ class SimulatedMarket:
         The book is intentionally slightly misaligned with fair_prob
         to create arbitrage opportunities.
         """
-        # Add noise/delay to simulate Polymarket lag
-        lag_noise = random.gauss(0, 0.03)
+        # Add noise/delay to simulate Polymarket lag (larger = more arb opportunities)
+        lag_noise = random.gauss(0, 0.05)
         displayed_prob = max(0.05, min(0.95, fair_prob + lag_noise))
 
         # Generate book levels around displayed_prob
-        spread = random.uniform(0.02, 0.05)
+        spread = random.uniform(0.03, 0.07)
         best_bid = max(0.01, displayed_prob - spread / 2)
         best_ask = min(0.99, displayed_prob + spread / 2)
 
@@ -131,11 +169,11 @@ class DemoEngine:
         self.settings = Settings()
         self.market = SimulatedMarket()
         self.volatility = VolatilityEstimator(span=60, min_samples=5)
-        self.bayesian = BayesianSignal(prior=0.5)
-        self.edge_detector = EdgeDetector(window=80, base_z_threshold=1.8, min_net_ev=0.002)
+        self.bayesian = BayesianSignal(prior=0.5, decay=0.97)  # stronger decay to prevent sticking
+        self.edge_detector = EdgeDetector(window=60, base_z_threshold=1.2, min_net_ev=0.001, fee_rate=0.01, min_confidence=0.80)
         self.kelly = KellySizer(fraction=0.5, max_fraction=0.05, max_absolute=5000)
         self.lmsr = LMSRImpact()
-        self.stoikov = StoikovQuoter(gamma=0.18, max_inventory=3.0)
+        self.stoikov = StoikovQuoter(gamma=0.18, max_inventory=5.0)
         self.order_manager = OrderManager(trading_mode="paper")
         self.hedge = HedgeManager(max_net_exposure=10000)
 
@@ -155,13 +193,13 @@ class DemoEngine:
         self.running = False
 
         self.pnl_history = []
-        self.btc_price = 87_500.0
+        self.btc_price = self.market.price
         self.binance_connected = True
         self.coinbase_connected = True
 
-        # Warm up volatility
+        # Warm up volatility with realistic noise around actual price
         for i in range(20):
-            p = 87_500 + random.gauss(0, 20)
+            p = self.btc_price + random.gauss(0, self.btc_price * 0.0003)
             self.volatility.update(p)
 
     @property
@@ -194,13 +232,13 @@ class DemoEngine:
         if vol is None or vol == 0:
             return
 
-        # 2. Compute spot delta (last 10 ticks)
-        spot_delta = random.gauss(0, vol * self.btc_price * 5)
+        # 2. Use actual spot delta from price history (realistic)
+        spot_delta = self.market.spot_delta
 
         # 3. Generate Polymarket orderbook with lag
         # Fair probability based on recent momentum
-        momentum = spot_delta / (vol * self.btc_price * 10 + 1e-8)
-        fair_up_prob = 0.5 + 0.5 * math.tanh(momentum)
+        momentum = spot_delta / (vol * self.btc_price * 5 + 1e-8)
+        fair_up_prob = 0.5 + 0.4 * math.tanh(momentum)  # less extreme
         book = self.market.get_polymarket_book(fair_up_prob)
 
         # 4. Bayesian update
@@ -262,7 +300,9 @@ class DemoEngine:
             self.total_pnl += profit
             self.wins += 1
             self.consecutive_losses = 0
-            self.stoikov.on_fill("BUY", 1)
+            # Stoikov inventory: normalized units (not raw dollar amount)
+            fill_side = "BUY" if "YES" in edge.direction else "SELL"
+            self.stoikov.on_fill(fill_side, 1.0)
 
             stream.log("FILL", f"{edge.direction} ${position_size:.0f} @ {buy_price:.3f} WIN +${profit:.2f}",
                         direction=edge.direction, size=round(position_size, 0), profit=round(profit, 2))
@@ -273,6 +313,9 @@ class DemoEngine:
             self.total_pnl -= loss
             self.losses += 1
             self.consecutive_losses += 1
+
+            fill_side = "BUY" if "YES" in edge.direction else "SELL"
+            self.stoikov.on_fill(fill_side, 1.0)
 
             stream.log("FILL", f"{edge.direction} ${position_size:.0f} @ {buy_price:.3f} LOSS -${loss:.2f}",
                         direction=edge.direction, size=round(position_size, 0), loss=round(loss, 2))
@@ -302,11 +345,12 @@ class DemoEngine:
             self.hedge.reset()
             self.stoikov.on_expiry()
 
-        # Market expiry (every ~60 cycles, reset for new 5-min window)
-        if self.cycles % 60 == 0:
+        # Market expiry (every ~50 cycles, reset for new 5-min window)
+        if self.cycles % 50 == 0:
             self.bayesian.reset()
             self.stoikov.on_expiry()
-            stream.log("SCAN", f"New 5-min market window, cycle #{self.cycles}")
+            self.hedge.reset()
+            stream.log("SCAN", f"New 5-min market | BTC=${self.btc_price:,.0f} | cycle #{self.cycles}")
 
 
 # ═══════════════════════════════════════════════════════════

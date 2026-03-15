@@ -48,11 +48,13 @@ class EdgeDetector:
         base_z_threshold: float = 2.0,
         min_net_ev: float = 0.003,
         fee_rate: float = 0.02,  # Polymarket ~2% effective cost
+        min_confidence: float = 0.90,
     ):
         self._window = window
         self._base_z_threshold = base_z_threshold
         self._min_net_ev = min_net_ev
         self._fee_rate = fee_rate
+        self._min_confidence = min_confidence
         self._spreads: deque[float] = deque(maxlen=window)
         self._net_evs: deque[float] = deque(maxlen=window)
 
@@ -113,7 +115,7 @@ class EdgeDetector:
         is_signal = (
             z_score >= z_threshold
             and net_ev >= self._min_net_ev
-            and confidence >= 0.90
+            and confidence >= self._min_confidence
         )
 
         signal = EdgeSignal(
