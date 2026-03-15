@@ -20,6 +20,10 @@
             <span id="statusText">Offline</span>
         </div>
         <div class="header-right">
+            <button class="btn btn-wallet" id="btnWallet" onclick="openWallet()">
+                <span id="walletIcon">&#9919;</span>
+                <span id="walletLabel">Connect Wallet</span>
+            </button>
             <button class="btn btn-success" id="btnStart" onclick="startEngine()">Start</button>
             <button class="btn btn-danger" id="btnStop" onclick="stopEngine()" disabled>Stop</button>
             <button class="btn btn-secondary" onclick="openSettings()">Settings</button>
@@ -265,6 +269,140 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
                 <button class="btn btn-success" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ WALLET MODAL ═══ -->
+    <div class="modal-overlay" id="walletModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Wallet Connection</h2>
+                <button class="btn-close" onclick="closeWallet()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Not connected -->
+                <div id="walletStep1">
+                    <div class="wallet-info">
+                        <p>Connect your Polygon wallet to trade on Polymarket with real funds.</p>
+                        <p class="dim" style="margin-top:8px">Network: <strong>Polygon Mainnet</strong> (Chain ID: 137)</p>
+                        <p class="dim">Currency: <strong>USDC</strong> + MATIC for gas</p>
+                    </div>
+
+                    <div class="wallet-options">
+                        <div class="wallet-option" onclick="connectPrivateKey()">
+                            <div class="wallet-option-icon">&#128273;</div>
+                            <div>
+                                <strong>Private Key</strong>
+                                <p class="dim">Paste your wallet private key directly</p>
+                            </div>
+                        </div>
+                        <div class="wallet-option" onclick="connectEnvFile()">
+                            <div class="wallet-option-icon">&#128196;</div>
+                            <div>
+                                <strong>.env File</strong>
+                                <p class="dim">Already configured in .env file</p>
+                            </div>
+                        </div>
+                        <div class="wallet-option" onclick="generateNewWallet()">
+                            <div class="wallet-option-icon">&#10010;</div>
+                            <div>
+                                <strong>Generate New Wallet</strong>
+                                <p class="dim">Create a fresh wallet for the bot</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Enter private key -->
+                <div id="walletStep2" style="display:none">
+                    <div class="field">
+                        <label>Private Key (0x...)</label>
+                        <input type="password" id="walletPrivateKey" placeholder="0x..."
+                               style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px">
+                    </div>
+                    <div class="field" style="margin-top:12px">
+                        <label>Proxy Wallet Address (optional, for Polymarket email wallets)</label>
+                        <input type="text" id="walletFunder" placeholder="0x..."
+                               style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px">
+                    </div>
+                    <div class="modal-warning" style="margin-top:12px">
+                        &#128274; Your key is stored ONLY on this server in memory and .env file.
+                        It is never sent anywhere else.
+                    </div>
+                    <div style="margin-top:16px;display:flex;gap:8px">
+                        <button class="btn btn-secondary" onclick="showWalletStep(1)">Back</button>
+                        <button class="btn btn-success" onclick="submitPrivateKey()">Connect</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Connected -->
+                <div id="walletStep3" style="display:none">
+                    <div class="wallet-connected">
+                        <div class="wallet-connected-icon">&#9989;</div>
+                        <h3>Wallet Connected</h3>
+                        <div class="wallet-details">
+                            <div class="status-row">
+                                <span class="status-label">Address</span>
+                                <span class="status-value" id="wAddress" style="font-size:11px">—</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Network</span>
+                                <span class="status-value online">Polygon Mainnet</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">USDC Balance</span>
+                                <span class="status-value" id="wBalance">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">MATIC (gas)</span>
+                                <span class="status-value" id="wMatic">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Polymarket Allowance</span>
+                                <span class="status-value" id="wAllowance">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">API Keys</span>
+                                <span class="status-value" id="wApiKeys">checking...</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+                            <button class="btn btn-success" onclick="switchToLive()">Switch to LIVE Mode</button>
+                            <button class="btn btn-secondary" onclick="disconnectWallet()">Disconnect</button>
+                            <button class="btn btn-secondary" onclick="closeWallet()">Close</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: New wallet generated -->
+                <div id="walletStep4" style="display:none">
+                    <div class="wallet-connected">
+                        <div class="wallet-connected-icon">&#127381;</div>
+                        <h3>New Wallet Generated</h3>
+                        <div class="modal-warning" style="margin-bottom:12px">
+                            &#9888; SAVE THESE DETAILS! You will NOT be able to recover them later.
+                        </div>
+                        <div class="wallet-details">
+                            <div class="status-row">
+                                <span class="status-label">Address</span>
+                                <span class="status-value" id="wNewAddress" style="font-size:11px;word-break:break-all">—</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Private Key</span>
+                                <span class="status-value" id="wNewKey" style="font-size:10px;word-break:break-all;color:var(--accent-red)">—</span>
+                            </div>
+                        </div>
+                        <p class="dim" style="margin-top:12px">
+                            To use this wallet, send USDC + MATIC on <strong>Polygon network</strong> to the address above.
+                        </p>
+                        <div style="margin-top:16px;display:flex;gap:8px">
+                            <button class="btn btn-success" onclick="useGeneratedWallet()">Use This Wallet</button>
+                            <button class="btn btn-secondary" onclick="showWalletStep(1)">Back</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

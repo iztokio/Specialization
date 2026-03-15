@@ -27,6 +27,8 @@ from flask_socketio import SocketIO, emit
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from eth_account import Account
+
 from config.settings import Settings
 from engine.arbitrage import ArbitrageEngine
 from monitoring.logger import TrainingStream, get_logger
@@ -47,6 +49,7 @@ engine_thread: threading.Thread | None = None
 engine_loop: asyncio.AbstractEventLoop | None = None
 settings: Settings | None = None
 pnl_history: list[dict] = []
+wallet_state: dict | None = None
 
 
 def get_or_create_settings() -> Settings:
@@ -203,6 +206,71 @@ def get_module_status():
         "active_orders": engine.order_manager.active_count,
         "trading_mode": engine.settings.trading_mode,
     })
+
+
+# ── Wallet API ──────────────────────────────────────────────
+
+@app.route("/api/wallet/connect", methods=["POST"])
+def wallet_connect():
+    global wallet_state
+    data = request.json or {}
+
+    try:
+        if data.get("source") == "env":
+            pk = os.environ.get("PRIVATE_KEY", "")
+            if not pk or pk == "your_polygon_private_key_here":
+                return jsonify({"status": "error", "error": "No PRIVATE_KEY in .env"}), 400
+        else:
+            pk = data.get("private_key", "")
+
+        if not pk:
+            return jsonify({"status": "error", "error": "No private key provided"}), 400
+
+        if not pk.startswith("0x"):
+            pk = "0x" + pk
+
+        acct = Account.from_key(pk)
+        wallet_state = {"address": acct.address, "private_key": pk}
+
+        os.environ["PRIVATE_KEY"] = pk
+
+        funder = data.get("funder")
+        if funder:
+            os.environ["POLYMARKET_FUNDER"] = funder
+
+        logger.info(f"Wallet connected: {acct.address[:10]}...")
+
+        return jsonify({
+            "status": "ok",
+            "address": acct.address,
+            "usdc_balance": "Check on Polygon",
+            "matic_balance": "Check on Polygon",
+            "allowance": "Will be set on first trade",
+            "api_keys": False,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/wallet/generate", methods=["POST"])
+def wallet_generate():
+    try:
+        acct = Account.create()
+        return jsonify({
+            "status": "ok",
+            "address": acct.address,
+            "private_key": acct.key.hex() if isinstance(acct.key, bytes) else str(acct.key),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/wallet/disconnect", methods=["POST"])
+def wallet_disconnect():
+    global wallet_state
+    wallet_state = None
+    logger.info("Wallet disconnected")
+    return jsonify({"status": "ok"})
 
 
 # ── Socket.IO events ────────────────────────────────────────

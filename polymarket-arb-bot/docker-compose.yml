@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  arb-bot:
+    build: .
+    container_name: arb-engine
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - INITIAL_BANKROLL=${INITIAL_BANKROLL:-2050}
+    volumes:
+      - ./data:/app/data        # persist recorded market data
+      - ./.env:/app/.env:ro     # config
+    restart: unless-stopped
+
+    # Switch command for different modes:
+    #   Demo (simulated):  python web/demo.py
+    #   Paper (real feeds): python web/app.py
+    #   Live trading:       python web/app.py  (+ set TRADING_MODE=live in .env)
+    command: python web/demo.py

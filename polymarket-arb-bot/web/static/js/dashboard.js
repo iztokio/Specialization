@@ -404,6 +404,168 @@ function clearStream() {
         '<div class="stream-entry dim">Stream cleared</div>';
 }
 
+// ── Wallet Connection ───────────────────────────────────────
+let walletConnected = false;
+
+function openWallet() {
+    document.getElementById('walletModal').classList.add('active');
+    showWalletStep(walletConnected ? 3 : 1);
+}
+
+function closeWallet() {
+    document.getElementById('walletModal').classList.remove('active');
+}
+
+function showWalletStep(step) {
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById('walletStep' + i).style.display = i === step ? 'block' : 'none';
+    }
+}
+
+function connectPrivateKey() {
+    showWalletStep(2);
+}
+
+async function connectEnvFile() {
+    try {
+        const resp = await fetch('/api/wallet/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: 'env' }),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            onWalletConnected(data);
+        } else {
+            alert('No wallet configured in .env file. Please use Private Key option.');
+        }
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+}
+
+async function submitPrivateKey() {
+    const key = document.getElementById('walletPrivateKey').value.trim();
+    const funder = document.getElementById('walletFunder').value.trim();
+
+    if (!key || !key.startsWith('0x') || key.length < 64) {
+        alert('Invalid private key. Must start with 0x and be 66 characters.');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/wallet/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ private_key: key, funder: funder || null }),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('walletPrivateKey').value = '';
+            onWalletConnected(data);
+        } else {
+            alert('Connection failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+}
+
+async function generateNewWallet() {
+    try {
+        const resp = await fetch('/api/wallet/generate', { method: 'POST' });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('wNewAddress').textContent = data.address;
+            document.getElementById('wNewKey').textContent = data.private_key;
+            showWalletStep(4);
+        } else {
+            alert('Failed to generate wallet: ' + (data.error || ''));
+        }
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+}
+
+async function useGeneratedWallet() {
+    const key = document.getElementById('wNewKey').textContent;
+    try {
+        const resp = await fetch('/api/wallet/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ private_key: key }),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            onWalletConnected(data);
+        }
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+}
+
+function onWalletConnected(data) {
+    walletConnected = true;
+    showWalletStep(3);
+
+    setText('wAddress', data.address || '—');
+    setText('wBalance', data.usdc_balance || 'N/A (connect to Polygon to check)');
+    setText('wMatic', data.matic_balance || 'N/A');
+    setText('wAllowance', data.allowance || 'Will be set on first trade');
+    setText('wApiKeys', data.api_keys ? 'Configured' : 'Will auto-generate');
+
+    // Update header button
+    const btn = document.getElementById('btnWallet');
+    btn.classList.add('connected');
+    const addr = data.address || '';
+    document.getElementById('walletLabel').textContent =
+        addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : 'Connected';
+    document.getElementById('walletIcon').textContent = '\u2705';
+
+    addStreamEntry({
+        timestamp: Date.now() / 1000,
+        tag: 'WALLET',
+        message: 'Connected: ' + (addr ? addr.slice(0, 10) + '...' : 'OK'),
+    });
+}
+
+async function switchToLive() {
+    if (!confirm(
+        'Switch to LIVE trading mode?\n\n' +
+        'This will use REAL MONEY from your connected wallet.\n' +
+        'Make sure you understand the risks.'
+    )) return;
+
+    try {
+        await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trading_mode: 'live' }),
+        });
+        const badge = document.getElementById('modeBadge');
+        badge.textContent = 'LIVE';
+        badge.className = 'mode-badge live';
+        closeWallet();
+        addStreamEntry({
+            timestamp: Date.now() / 1000,
+            tag: 'CONFIG',
+            message: 'Switched to LIVE trading mode',
+        });
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+}
+
+function disconnectWallet() {
+    walletConnected = false;
+    const btn = document.getElementById('btnWallet');
+    btn.classList.remove('connected');
+    document.getElementById('walletLabel').textContent = 'Connect Wallet';
+    document.getElementById('walletIcon').textContent = '\u26D3';
+    showWalletStep(1);
+    fetch('/api/wallet/disconnect', { method: 'POST' });
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 function setText(id, text) {
     const el = document.getElementById(id);
