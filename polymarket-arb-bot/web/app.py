@@ -202,7 +202,7 @@ def get_pnl_history():
 def get_module_status():
     if engine is None:
         return jsonify({"running": False})
-    polymarket_connected = engine.polymarket._client is not None and len(engine._active_markets) > 0
+    polymarket_connected = engine.polymarket._client is not None
     return jsonify({
         "running": True,
         "binance_connected": engine.binance.connected,

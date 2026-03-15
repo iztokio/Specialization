@@ -107,40 +107,101 @@ class PolymarketFeed:
     async def discover_5min_btc_markets(self) -> list[Market]:
         """Find all active 5-minute BTC up/down markets."""
         try:
-            # Query Gamma API for BTC 5-min markets
-            resp = await self._client.get(
-                f"{self.gamma_url}/markets",
-                params={
-                    "tag": "crypto",
-                    "active": "true",
-                    "closed": "false",
-                    "limit": 50,
-                },
-            )
-            resp.raise_for_status()
-            raw_markets = resp.json()
+            raw_markets = []
+            # Try multiple search strategies to find BTC short-term markets
+            search_params = [
+                {"tag": "crypto", "active": "true", "closed": "false", "limit": 100},
+                {"active": "true", "closed": "false", "limit": 100},
+            ]
+            for params in search_params:
+                try:
+                    resp = await self._client.get(
+                        f"{self.gamma_url}/markets", params=params,
+                    )
+                    resp.raise_for_status()
+                    batch = resp.json()
+                    if isinstance(batch, list):
+                        raw_markets.extend(batch)
+                except Exception:
+                    continue
+                if raw_markets:
+                    break
+
+            # Deduplicate by conditionId
+            seen_ids = set()
+            unique_markets = []
+            for m in raw_markets:
+                mid = m.get("conditionId", m.get("id", ""))
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    unique_markets.append(m)
+            raw_markets = unique_markets
+
+            # Log what API returned for debugging
+            if not raw_markets:
+                logger.warning("Gamma API returned 0 markets")
+            else:
+                btc_related = [
+                    m.get("question", "")[:80]
+                    for m in raw_markets
+                    if any(
+                        kw in m.get("question", "").lower()
+                        for kw in ("btc", "bitcoin")
+                    )
+                ]
+                logger.info(
+                    f"Gamma API returned {len(raw_markets)} markets, "
+                    f"{len(btc_related)} BTC-related"
+                )
+                if btc_related:
+                    for q in btc_related[:5]:
+                        logger.debug(f"  BTC market: {q}")
 
             markets = []
             for m in raw_markets:
-                # Filter for 5-minute BTC up/down markets
                 slug = m.get("slug", "").lower()
                 question = m.get("question", "").lower()
-                if not (
-                    ("btc" in question or "bitcoin" in question)
-                    and ("5 min" in question or "5-min" in slug or "5m" in slug)
-                    and ("up" in question or "down" in question)
-                ):
+                description = m.get("description", "").lower()
+                combined = f"{question} {slug} {description}"
+
+                # Check if BTC-related
+                is_btc = any(
+                    kw in combined for kw in ("btc", "bitcoin")
+                )
+                if not is_btc:
+                    continue
+
+                # Check if short-term (5-min, 1-min, 15-min, hourly, etc.)
+                is_short_term = any(
+                    kw in combined
+                    for kw in (
+                        "5 min", "5-min", "5m",
+                        "1 min", "1-min", "1m",
+                        "15 min", "15-min", "15m",
+                        "minute", "hour", "1 hour", "1-hour", "1h",
+                        "short", "next",
+                    )
+                )
+
+                # Check if directional (up/down/above/below/over/under/higher/lower)
+                is_directional = any(
+                    kw in combined
+                    for kw in (
+                        "up", "down", "above", "below",
+                        "over", "under", "higher", "lower",
+                        "rise", "fall", "reach", "hit", "drop",
+                        "yes", "no",
+                    )
+                )
+
+                if not (is_short_term and is_directional):
                     continue
 
                 tokens = m.get("clobTokenIds", [])
                 if len(tokens) < 2:
                     continue
 
-                outcomes = m.get("outcomes", ["Yes", "No"])
                 prices = m.get("outcomePrices", ["0.5", "0.5"])
-                end_str = m.get("endDate", "")
-
-                # Parse end time
                 end_time = self._parse_end_time(m)
 
                 market = Market(
@@ -155,7 +216,7 @@ class PolymarketFeed:
                 markets.append(market)
                 self._markets[market.condition_id] = market
 
-            logger.info(f"Discovered {len(markets)} active 5-min BTC markets")
+            logger.info(f"Discovered {len(markets)} active short-term BTC markets")
             return markets
 
         except Exception:

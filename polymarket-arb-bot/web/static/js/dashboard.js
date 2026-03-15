@@ -185,7 +185,15 @@ function updateModuleStatus(data) {
     setStatus('sPolymarket', data.polymarket_connected);
     if (data.polymarket_connected) {
         const el = document.getElementById('sPolymarket');
-        if (el) el.textContent = 'ONLINE (' + (data.polymarket_markets || 0) + ' markets)';
+        const mCount = data.polymarket_markets || 0;
+        if (el) {
+            if (mCount > 0) {
+                el.textContent = 'ONLINE (' + mCount + ' markets)';
+            } else {
+                el.textContent = 'ONLINE (scanning...)';
+                el.className = 'status-value warning';
+            }
+        }
     }
 
     setText('sBtcPrice', data.binance_price ? '$' + num(data.binance_price, 0) : '—');
