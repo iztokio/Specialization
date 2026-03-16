@@ -104,124 +104,165 @@ class PolymarketFeed:
 
     # ── Market Discovery ─────────────────────────────────────
 
-    async def discover_5min_btc_markets(self) -> list[Market]:
-        """Find all active 5-minute BTC up/down markets."""
+    @staticmethod
+    def _compute_window_timestamps(interval: int = 300, look_ahead: int = 2) -> list[int]:
+        """Compute current and upcoming window-aligned timestamps.
+
+        Args:
+            interval: Window size in seconds (300 = 5 min).
+            look_ahead: How many future windows to include.
+        """
+        now = int(time.time())
+        current_window = now - (now % interval)
+        return [current_window + i * interval for i in range(look_ahead)]
+
+    async def _fetch_market_by_slug(self, slug: str) -> dict | None:
+        """Query Gamma API for a specific market by slug."""
         try:
-            raw_markets = []
-            # Try multiple search strategies to find BTC short-term markets
-            search_params = [
-                {"tag": "crypto", "active": "true", "closed": "false", "limit": 100},
-                {"active": "true", "closed": "false", "limit": 100},
-            ]
-            for params in search_params:
-                try:
-                    resp = await self._client.get(
-                        f"{self.gamma_url}/markets", params=params,
-                    )
-                    resp.raise_for_status()
-                    batch = resp.json()
-                    if isinstance(batch, list):
-                        raw_markets.extend(batch)
-                except Exception:
-                    continue
-                if raw_markets:
-                    break
-
-            # Deduplicate by conditionId
-            seen_ids = set()
-            unique_markets = []
-            for m in raw_markets:
-                mid = m.get("conditionId", m.get("id", ""))
-                if mid not in seen_ids:
-                    seen_ids.add(mid)
-                    unique_markets.append(m)
-            raw_markets = unique_markets
-
-            # Log what API returned for debugging
-            if not raw_markets:
-                logger.warning("Gamma API returned 0 markets")
-            else:
-                btc_related = [
-                    m.get("question", "")[:80]
-                    for m in raw_markets
-                    if any(
-                        kw in m.get("question", "").lower()
-                        for kw in ("btc", "bitcoin")
-                    )
-                ]
-                logger.info(
-                    f"Gamma API returned {len(raw_markets)} markets, "
-                    f"{len(btc_related)} BTC-related"
-                )
-                if btc_related:
-                    for q in btc_related[:5]:
-                        logger.debug(f"  BTC market: {q}")
-
-            markets = []
-            for m in raw_markets:
-                slug = m.get("slug", "").lower()
-                question = m.get("question", "").lower()
-                description = m.get("description", "").lower()
-                combined = f"{question} {slug} {description}"
-
-                # Check if BTC-related
-                is_btc = any(
-                    kw in combined for kw in ("btc", "bitcoin")
-                )
-                if not is_btc:
-                    continue
-
-                # Check if short-term (5-min, 1-min, 15-min, hourly, etc.)
-                is_short_term = any(
-                    kw in combined
-                    for kw in (
-                        "5 min", "5-min", "5m",
-                        "1 min", "1-min", "1m",
-                        "15 min", "15-min", "15m",
-                        "minute", "hour", "1 hour", "1-hour", "1h",
-                        "short", "next",
-                    )
-                )
-
-                # Check if directional (up/down/above/below/over/under/higher/lower)
-                is_directional = any(
-                    kw in combined
-                    for kw in (
-                        "up", "down", "above", "below",
-                        "over", "under", "higher", "lower",
-                        "rise", "fall", "reach", "hit", "drop",
-                        "yes", "no",
-                    )
-                )
-
-                if not (is_short_term and is_directional):
-                    continue
-
-                tokens = m.get("clobTokenIds", [])
-                if len(tokens) < 2:
-                    continue
-
-                prices = m.get("outcomePrices", ["0.5", "0.5"])
-                end_time = self._parse_end_time(m)
-
-                market = Market(
-                    condition_id=m.get("conditionId", m.get("id", "")),
-                    question=m.get("question", ""),
-                    yes_token_id=tokens[0],
-                    no_token_id=tokens[1],
-                    end_time=end_time,
-                    active=True,
-                    outcome_prices=(float(prices[0]), float(prices[1])),
-                )
-                markets.append(market)
-                self._markets[market.condition_id] = market
-
-            logger.info(f"Discovered {len(markets)} active short-term BTC markets")
-            return markets
-
+            # Try /events endpoint first (returns event with nested markets)
+            resp = await self._client.get(
+                f"{self.gamma_url}/events",
+                params={"slug": slug},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list) and data:
+                    event = data[0]
+                    # Events contain nested markets
+                    nested = event.get("markets", [])
+                    if nested:
+                        return nested[0]
+                    return event
+                elif isinstance(data, dict) and data:
+                    return data
         except Exception:
-            logger.exception("Failed to discover markets")
-            return list(self._markets.values())
+            pass
+
+        try:
+            # Fallback: /markets endpoint with slug parameter
+            resp = await self._client.get(
+                f"{self.gamma_url}/markets",
+                params={"slug": slug},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list) and data:
+                    return data[0]
+                elif isinstance(data, dict) and data.get("conditionId"):
+                    return data
+        except Exception:
+            pass
+
+        return None
+
+    async def discover_5min_btc_markets(self) -> list[Market]:
+        """Find active 5-minute BTC up/down markets using deterministic slug lookup.
+
+        Polymarket 5-min BTC markets use predictable slugs based on Unix timestamps
+        aligned to 300-second windows: btc-updown-5m-{window_ts}
+        """
+        markets = []
+
+        # Strategy 1: Deterministic slug-based lookup (primary)
+        timestamps = self._compute_window_timestamps(interval=300, look_ahead=3)
+        slug_patterns = [
+            "btc-updown-5m-{ts}",
+            "btc-5m-{ts}",
+            "bitcoin-5m-{ts}",
+            "btc-up-down-5m-{ts}",
+        ]
+
+        for ts in timestamps:
+            for pattern in slug_patterns:
+                slug = pattern.format(ts=ts)
+                m = await self._fetch_market_by_slug(slug)
+                if m:
+                    market = self._parse_market(m)
+                    if market:
+                        markets.append(market)
+                        logger.info(f"Found market via slug: {slug} → {market.question[:60]}")
+                    break  # Found a match for this timestamp, skip other patterns
+
+        # Strategy 2: Keyword scan fallback (if slug lookup found nothing)
+        if not markets:
+            try:
+                resp = await self._client.get(
+                    f"{self.gamma_url}/markets",
+                    params={
+                        "tag": "crypto",
+                        "active": "true",
+                        "closed": "false",
+                        "limit": 100,
+                    },
+                )
+                resp.raise_for_status()
+                raw_markets = resp.json() if isinstance(resp.json(), list) else []
+
+                # Log what the API returns for diagnostics
+                btc_questions = []
+                for m in raw_markets:
+                    q = m.get("question", "")
+                    slug = m.get("slug", "")
+                    if any(kw in q.lower() for kw in ("btc", "bitcoin")):
+                        btc_questions.append(f"{q[:70]} [slug={slug}]")
+
+                if btc_questions:
+                    logger.info(f"Gamma API: {len(raw_markets)} total, {len(btc_questions)} BTC markets:")
+                    for q in btc_questions[:10]:
+                        logger.info(f"  → {q}")
+                else:
+                    logger.warning(
+                        f"Gamma API: {len(raw_markets)} markets returned, 0 BTC-related. "
+                        f"Sample slugs: {[m.get('slug','')[:40] for m in raw_markets[:3]]}"
+                    )
+
+                # Try to find ANY tradeable BTC market
+                for m in raw_markets:
+                    combined = f"{m.get('question', '')} {m.get('slug', '')}".lower()
+                    if not any(kw in combined for kw in ("btc", "bitcoin")):
+                        continue
+                    market = self._parse_market(m)
+                    if market:
+                        markets.append(market)
+
+            except Exception:
+                logger.exception("Fallback market scan failed")
+
+        # Update internal cache
+        for market in markets:
+            self._markets[market.condition_id] = market
+
+        # Clean up expired markets from cache
+        self._markets = {
+            k: v for k, v in self._markets.items() if v.seconds_to_expiry > 0
+        }
+
+        logger.info(f"Discovered {len(markets)} active BTC markets")
+        return markets
+
+    def _parse_market(self, m: dict) -> Market | None:
+        """Parse a raw market dict into a Market object."""
+        tokens = m.get("clobTokenIds", [])
+        if len(tokens) < 2:
+            return None
+
+        prices = m.get("outcomePrices", ["0.5", "0.5"])
+        try:
+            price_tuple = (float(prices[0]), float(prices[1]))
+        except (ValueError, IndexError):
+            price_tuple = (0.5, 0.5)
+
+        end_time = self._parse_end_time(m)
+
+        return Market(
+            condition_id=m.get("conditionId", m.get("id", "")),
+            question=m.get("question", ""),
+            yes_token_id=tokens[0],
+            no_token_id=tokens[1],
+            end_time=end_time,
+            active=True,
+            outcome_prices=price_tuple,
+        )
 
     async def get_orderbook(self, token_id: str) -> OrderBook:
         """Fetch current orderbook for a token from CLOB API."""

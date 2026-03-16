@@ -264,7 +264,11 @@ class ArbitrageEngine:
                 if time.time() - self._last_market_scan > self.settings.market_scan_interval:
                     self._active_markets = await self.polymarket.discover_5min_btc_markets()
                     self._last_market_scan = time.time()
-                    stream.log("SCAN", f"Found {len(self._active_markets)} active markets")
+                    if self._active_markets:
+                        for m in self._active_markets:
+                            stream.log("SCAN", f"Market: {m.question[:50]} (expires {m.seconds_to_expiry:.0f}s)")
+                    else:
+                        stream.log("SCAN", "No active BTC markets found — check terminal logs for details")
 
                 # ── Check existing order fills ───────────────
                 mid = self.binance.last_price or 0
