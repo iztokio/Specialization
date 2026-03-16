@@ -86,9 +86,14 @@ class KellySizer:
         adjusted_f = full_f * self.fraction
 
         # Cap at max fraction of bankroll
+        # For micro-accounts (<$100), allow larger fraction per trade
+        effective_max_f = self.max_fraction
+        if bankroll < 100.0:
+            effective_max_f = max(self.max_fraction, 0.20)  # up to 20% per trade
+
         reason = "safe"
-        if adjusted_f > self.max_fraction:
-            adjusted_f = self.max_fraction
+        if adjusted_f > effective_max_f:
+            adjusted_f = effective_max_f
             reason = "capped at max fraction"
 
         # Dollar amount
@@ -100,9 +105,10 @@ class KellySizer:
             adjusted_f = position / bankroll
             reason = "capped at max absolute"
 
-        # Minimum viable order ($1)
-        if position < 1.0:
-            stream.log("KELLY", f"f={full_f:.3f}, size too small", f=round(full_f, 3))
+        # Minimum viable order — Polymarket supports small orders
+        min_order = 0.10 if bankroll < 100.0 else 1.0
+        if position < min_order:
+            stream.log("KELLY", f"f={full_f:.3f}, size too small (${position:.2f}<${min_order})", f=round(full_f, 3))
             return KellyResult(full_f, 0, 0, bankroll, win_prob, "size too small")
 
         stream.log(
