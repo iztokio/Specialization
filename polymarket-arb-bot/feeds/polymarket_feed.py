@@ -243,10 +243,25 @@ class PolymarketFeed:
     def _parse_market(self, m: dict) -> Market | None:
         """Parse a raw market dict into a Market object."""
         tokens = m.get("clobTokenIds", [])
+        # Gamma API may return JSON strings instead of lists — parse them
+        if isinstance(tokens, str):
+            try:
+                tokens = orjson.loads(tokens)
+            except Exception:
+                logger.warning(f"Failed to parse clobTokenIds: {tokens!r}")
+                return None
         if len(tokens) < 2:
+            logger.debug(f"Market skipped: <2 tokens. Raw clobTokenIds={m.get('clobTokenIds')!r}")
             return None
 
+        logger.info(f"Parsed token IDs: YES={tokens[0][:16]}... NO={tokens[1][:16]}...")
+
         prices = m.get("outcomePrices", ["0.5", "0.5"])
+        if isinstance(prices, str):
+            try:
+                prices = orjson.loads(prices)
+            except Exception:
+                prices = ["0.5", "0.5"]
         try:
             price_tuple = (float(prices[0]), float(prices[1]))
         except (ValueError, IndexError):
