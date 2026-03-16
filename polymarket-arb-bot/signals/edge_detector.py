@@ -48,7 +48,7 @@ class EdgeDetector:
         base_z_threshold: float = 2.0,
         min_net_ev: float = 0.003,
         fee_rate: float = 0.02,  # Polymarket ~2% effective cost
-        min_confidence: float = 0.90,
+        min_confidence: float = 0.60,
     ):
         self._window = window
         self._base_z_threshold = base_z_threshold
@@ -82,7 +82,7 @@ class EdgeDetector:
             direction = "BUY_NO"  # Polymarket overprices YES → buy NO
 
         # Not enough data yet
-        if len(self._spreads) < 20:
+        if len(self._spreads) < 10:
             return EdgeSignal(
                 z_score=0.0,
                 spread=spread,
@@ -157,10 +157,11 @@ class EdgeDetector:
         if volatility is None:
             return self._base_z_threshold
 
-        # vol = 0.001 → threshold = 1.5 (easier trigger)
-        # vol = 0.005 → threshold = 2.0 (standard)
-        # vol = 0.010 → threshold = 2.5 (harder trigger)
-        vol_factor = min(max(volatility / 0.005, 0.5), 1.5)
+        # vol < 0.0001 → threshold = base * 0.3 (micro-vol, small edges matter)
+        # vol = 0.001  → threshold = base * 0.5
+        # vol = 0.005  → threshold = base * 1.0 (standard)
+        # vol = 0.010  → threshold = base * 1.5
+        vol_factor = min(max(volatility / 0.005, 0.3), 1.5)
         return self._base_z_threshold * vol_factor
 
     def _estimate_cost(self, poly_price: float) -> float:

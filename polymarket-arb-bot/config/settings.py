@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     max_inventory: float = 3.0
 
     # ── Signal parameters ────────────────────────────────────
-    z_score_threshold: float = 2.0
+    z_score_threshold: float = 0.8
     min_net_ev: float = 0.003
     bayesian_prior: float = 0.5
     edge_window: int = 100  # rolling window for Z-score
