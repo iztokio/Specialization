@@ -354,6 +354,7 @@ def on_start_engine(data=None):
     engine = ArbitrageEngine(s)
 
     # Initialize CLOB client for live mode
+    _clob_pk = None
     if s.trading_mode == "live":
         pk = os.environ.get("PRIVATE_KEY", s.private_key)
         if not pk or pk in ("", "your_polygon_wallet_private_key"):
@@ -363,47 +364,9 @@ def on_start_engine(data=None):
                 emit("engine_error", {"error": "No private key. Connect wallet first or set PRIVATE_KEY in .env"})
                 engine = None
                 return
-
-        clob_ok = False
-        try:
-            from py_clob_client.client import ClobClient
-
-            # Try up to 3 times with different configurations
-            last_err = None
-            for attempt in range(3):
-                try:
-                    funder_val = s.polymarket_funder or os.environ.get("POLYMARKET_FUNDER") or None
-                    clob_client = ClobClient(
-                        s.clob_url,
-                        key=pk,
-                        chain_id=s.chain_id,
-                        signature_type=0,  # EOA
-                        funder=funder_val,
-                    )
-                    creds = clob_client.create_or_derive_api_creds()
-                    clob_client.set_api_creds(creds)
-                    engine.order_manager.clob_client = clob_client
-                    engine.order_manager.mode = "live"
-                    clob_ok = True
-                    logger.info("Polymarket CLOB client initialized for LIVE trading")
-                    break
-                except Exception as e:
-                    last_err = e
-                    logger.warning(f"CLOB init attempt {attempt+1}/3 failed: {e}")
-                    import time as _time
-                    _time.sleep(2 ** attempt)  # 1s, 2s, 4s backoff
-
-            if not clob_ok:
-                logger.error(f"All CLOB init attempts failed: {last_err}")
-                stream.log("WARN", f"CLOB API unreachable — running in PAPER mode with real data. Error: {last_err}")
-                stream.log("WARN", "If you are outside the US, Polymarket trading API may be geo-blocked. Try using a VPN.")
-                engine.order_manager.mode = "paper"
-                # Don't block engine start — run with paper execution + real feeds
-
-        except ImportError:
-            logger.warning("py-clob-client not installed — running in paper mode")
-            stream.log("WARN", "py-clob-client not installed. Running paper mode. Install: pip install py-clob-client")
-            engine.order_manager.mode = "paper"
+        _clob_pk = pk
+        # Start in paper mode; background thread will upgrade to live if CLOB connects
+        engine.order_manager.mode = "paper"
 
     # Record P&L periodically
     original_on_fill = engine._on_fill
@@ -426,6 +389,53 @@ def on_start_engine(data=None):
 
     engine._on_fill = patched_on_fill
     engine.order_manager._fill_callbacks = [patched_on_fill]
+
+    # Background CLOB client init (non-blocking)
+    def _init_clob_background(eng, pk_val, settings):
+        """Try to connect to Polymarket CLOB API in background."""
+        import time as _time
+        try:
+            from py_clob_client.client import ClobClient
+        except ImportError:
+            stream.log("WARN", "py-clob-client not installed. Running paper mode.")
+            return
+
+        last_err = None
+        for attempt in range(3):
+            if eng is None:
+                return  # Engine was stopped
+            try:
+                funder_val = settings.polymarket_funder or os.environ.get("POLYMARKET_FUNDER") or None
+                clob_client = ClobClient(
+                    settings.clob_url,
+                    key=pk_val,
+                    chain_id=settings.chain_id,
+                    signature_type=0,  # EOA
+                    funder=funder_val,
+                )
+                creds = clob_client.create_or_derive_api_creds()
+                clob_client.set_api_creds(creds)
+                eng.order_manager.clob_client = clob_client
+                eng.order_manager.mode = "live"
+                stream.log("CLOB", "Polymarket CLOB connected — LIVE trading enabled")
+                logger.info("Polymarket CLOB client initialized for LIVE trading")
+                return
+            except Exception as e:
+                last_err = e
+                logger.warning(f"CLOB init attempt {attempt+1}/3 failed: {e}")
+                _time.sleep(2 ** attempt)
+
+        logger.error(f"All CLOB init attempts failed: {last_err}")
+        stream.log("WARN", f"CLOB API unreachable — staying in PAPER mode. Error: {last_err}")
+        stream.log("WARN", "Polymarket trading API may be geo-blocked. Try using a VPN (US).")
+
+    if _clob_pk:
+        clob_thread = threading.Thread(
+            target=_init_clob_background,
+            args=(engine, _clob_pk, s),
+            daemon=True,
+        )
+        clob_thread.start()
 
     def run_engine():
         global engine_loop
