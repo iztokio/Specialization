@@ -74,12 +74,15 @@ class OrderManager:
     Manages the full order lifecycle.
 
     In paper mode: simulates fills based on orderbook state.
-    In live mode: uses py-clob-client to interact with Polymarket CLOB.
+    In live mode: uses Hyperliquid SDK for perpetual futures trading.
     """
 
     def __init__(self, trading_mode: str = "paper", clob_client=None):
         self.mode = trading_mode
-        self.clob_client = clob_client
+        self.clob_client = clob_client  # legacy Polymarket
+        self.hl_exchange = None  # Hyperliquid Exchange instance
+        self.hl_info = None  # Hyperliquid Info instance
+        self.hl_address = ""  # Hyperliquid wallet address
         self._orders: dict[str, Order] = {}
         self._order_counter = 0
         self._fill_callbacks: list = []
@@ -149,11 +152,16 @@ class OrderManager:
         if not order or not order.is_active:
             return False
 
-        if self.mode == "live" and self.clob_client and order.polymarket_order_id:
+        if self.mode == "live" and order.polymarket_order_id:
             try:
-                self.clob_client.cancel(order.polymarket_order_id)
+                if self.hl_exchange:
+                    oid = int(order.polymarket_order_id) if order.polymarket_order_id.isdigit() else None
+                    if oid:
+                        self.hl_exchange.cancel(order.token_id, oid)
+                elif self.clob_client:
+                    self.clob_client.cancel(order.polymarket_order_id)
             except Exception:
-                logger.exception(f"Failed to cancel {order_id} on Polymarket")
+                logger.exception(f"Failed to cancel {order_id}")
                 return False
 
         order.status = OrderStatus.CANCELLED
@@ -245,7 +253,78 @@ class OrderManager:
     # ── Live trading ─────────────────────────────────────────
 
     async def _place_live(self, order: Order):
-        """Place order on Polymarket via py-clob-client."""
+        """Place order on Hyperliquid."""
+        if self.hl_exchange:
+            await self._place_hyperliquid(order)
+        elif self.clob_client:
+            await self._place_polymarket(order)
+        else:
+            order.status = OrderStatus.REJECTED
+            logger.warning("No exchange client available")
+
+    async def _place_hyperliquid(self, order: Order):
+        """Place limit order on Hyperliquid via SDK."""
+        try:
+            from hyperliquid.utils import constants
+            from hyperliquid.utils.types import LIMIT_ORDER
+
+            is_buy = order.side == OrderSide.BUY
+            coin = order.token_id  # e.g., "BTC"
+
+            # Hyperliquid uses coin size (BTC), not USD
+            # order.size is in USD, convert: size_btc = usd_size / price
+            size_coin = order.size / order.price if order.price > 0 else 0
+            # Round to Hyperliquid's size decimals (BTC = 5 decimals)
+            size_coin = round(size_coin, 5)
+
+            if size_coin <= 0:
+                order.status = OrderStatus.REJECTED
+                return
+
+            order_type = {"limit": {"tif": "Gtc"}}
+
+            result = self.hl_exchange.order(
+                coin,
+                is_buy,
+                size_coin,
+                order.price,
+                order_type,
+            )
+
+            # Parse response
+            if result and result.get("status") == "ok":
+                statuses = result.get("response", {}).get("data", {}).get("statuses", [])
+                if statuses and "resting" in statuses[0]:
+                    oid = statuses[0]["resting"]["oid"]
+                    order.polymarket_order_id = str(oid)
+                    order.status = OrderStatus.OPEN
+                    logger.info(f"Hyperliquid order placed: {coin} {'BUY' if is_buy else 'SELL'} {size_coin} @ {order.price} oid={oid}")
+                elif statuses and "filled" in statuses[0]:
+                    filled = statuses[0]["filled"]
+                    order.polymarket_order_id = str(filled.get("oid", ""))
+                    order.status = OrderStatus.FILLED
+                    order.filled_size = order.size
+                    order.filled_price = float(filled.get("avgPx", order.price))
+                    order.updated_at = time.time()
+                    self.total_fills += 1
+                    for cb in self._fill_callbacks:
+                        try:
+                            cb(order)
+                        except Exception:
+                            logger.exception("Fill callback error")
+                else:
+                    order.status = OrderStatus.REJECTED
+                    logger.warning(f"Hyperliquid order rejected: {statuses}")
+            else:
+                order.status = OrderStatus.REJECTED
+                logger.warning(f"Hyperliquid order failed: {result}")
+
+        except Exception:
+            logger.exception("Failed to place order on Hyperliquid")
+            order.status = OrderStatus.REJECTED
+
+    async def _place_polymarket(self, order: Order):
+        """Place order on Polymarket via py-clob-client (legacy)."""
         try:
             from py_clob_client.order_builder.constants import BUY, SELL
 
@@ -266,13 +345,48 @@ class OrderManager:
                 logger.warning(f"Order rejected: {resp}")
 
         except Exception:
-            logger.exception(f"Failed to place order on Polymarket")
+            logger.exception("Failed to place order on Polymarket")
             order.status = OrderStatus.REJECTED
 
     async def _check_live_fill(self, order: Order):
-        """Check order status on Polymarket."""
+        """Check order status on Hyperliquid or Polymarket."""
         if not order.polymarket_order_id:
             return
+
+        if self.hl_info and self.hl_address:
+            await self._check_hl_fill(order)
+        elif self.clob_client:
+            await self._check_poly_fill(order)
+
+    async def _check_hl_fill(self, order: Order):
+        """Check Hyperliquid order fill status."""
+        try:
+            open_orders = self.hl_info.open_orders(self.hl_address)
+            # If our order is no longer in open orders, it's filled or cancelled
+            oid = int(order.polymarket_order_id) if order.polymarket_order_id.isdigit() else None
+            if oid is None:
+                return
+
+            still_open = any(o.get("oid") == oid for o in open_orders)
+            if not still_open:
+                # Order was filled (or cancelled externally)
+                order.status = OrderStatus.FILLED
+                order.filled_size = order.size
+                order.filled_price = order.price
+                order.updated_at = time.time()
+                self.total_fills += 1
+
+                for cb in self._fill_callbacks:
+                    try:
+                        cb(order)
+                    except Exception:
+                        logger.exception("Fill callback error")
+
+        except Exception:
+            logger.exception(f"Failed to check Hyperliquid order {order.polymarket_order_id}")
+
+    async def _check_poly_fill(self, order: Order):
+        """Check Polymarket order status (legacy)."""
         try:
             resp = self.clob_client.get_order(order.polymarket_order_id)
             status = resp.get("status", "")

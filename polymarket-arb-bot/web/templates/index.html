@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARB ENGINE // 5-MIN BTC</title>
+    <title>ARB ENGINE // SPOT vs PERP</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -12,7 +12,7 @@
     <!-- ═══ HEADER ═══ -->
     <header class="header">
         <div class="header-left">
-            <h1 class="logo">ARB ENGINE <span class="dim">// 5-MIN BTC MARKETS</span></h1>
+            <h1 class="logo">ARB ENGINE <span class="dim">// SPOT vs PERP</span></h1>
         </div>
         <div class="header-center">
             <span class="mode-badge" id="modeBadge">PAPER</span>
@@ -96,8 +96,8 @@
                     <span class="status-value offline" id="sCoinbase">OFFLINE</span>
                 </div>
                 <div class="status-row">
-                    <span class="status-label">Polymarket</span>
-                    <span class="status-value offline" id="sPolymarket">OFFLINE</span>
+                    <span class="status-label">Hyperliquid</span>
+                    <span class="status-value offline" id="sHyperliquid">OFFLINE</span>
                 </div>
                 <div class="status-row">
                     <span class="status-label">BTC Price</span>
@@ -292,7 +292,7 @@
                 <!-- Step 1: Not connected -->
                 <div id="walletStep1">
                     <div class="wallet-info">
-                        <p>Connect your Polygon wallet to trade on Polymarket with real funds.</p>
+                        <p>Connect your wallet to trade on Hyperliquid with real funds.</p>
                         <p class="dim" style="margin-top:8px">Network: <strong>Polygon Mainnet</strong> (Chain ID: 137)</p>
                         <p class="dim">Currency: <strong>USDC</strong> + POL for gas</p>
                     </div>
@@ -330,7 +330,7 @@
                                style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px">
                     </div>
                     <div class="field" style="margin-top:12px">
-                        <label>Proxy Wallet Address (optional, for Polymarket email wallets)</label>
+                        <label>Vault Address (optional, for Hyperliquid vault trading)</label>
                         <input type="text" id="walletFunder" placeholder="0x..."
                                style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px">
                     </div>
@@ -367,7 +367,7 @@
                                 <span class="status-value" id="wMatic">checking...</span>
                             </div>
                             <div class="status-row">
-                                <span class="status-label">Polymarket Allowance</span>
+                                <span class="status-label">Hyperliquid Allowance</span>
                                 <span class="status-value" id="wAllowance">checking...</span>
                             </div>
                             <div class="status-row">

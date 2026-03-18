@@ -11,11 +11,16 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # ── Polymarket ───────────────────────────────────────────
+    # ── Hyperliquid ───────────────────────────────────────────
+    hyperliquid_api_url: str = "https://api.hyperliquid.xyz"
+    hyperliquid_coin: str = "BTC"
+    private_key: str = ""
+    hyperliquid_vault: str = ""  # optional vault address
+
+    # ── Legacy Polymarket (kept for backwards compat) ─────────
     polymarket_api_key: str = ""
     polymarket_secret: str = ""
     polymarket_passphrase: str = ""
-    private_key: str = ""
     polymarket_funder: str = ""
     clob_url: str = "https://clob.polymarket.com"
     gamma_url: str = "https://gamma-api.polymarket.com"

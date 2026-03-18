@@ -24,7 +24,7 @@ from execution.order_manager import OrderManager, Order, OrderStatus, OrderSide
 from execution.stoikov import StoikovQuoter
 from feeds.binance_feed import BinanceFeed
 from feeds.coinbase_feed import CoinbaseFeed
-from feeds.polymarket_feed import PolymarketFeed, Market, OrderBook
+from feeds.hyperliquid_feed import HyperliquidFeed, Market, OrderBook
 from monitoring.logger import get_logger, stream
 from risk.kelly import KellySizer
 from risk.lmsr import LMSRImpact
@@ -161,10 +161,12 @@ class ArbitrageEngine:
         # ── Data Feeds ───────────────────────────────────────
         self.binance = BinanceFeed(url=settings.binance_ws_url)
         self.coinbase = CoinbaseFeed(url=settings.coinbase_ws_url)
-        self.polymarket = PolymarketFeed(
-            clob_url=settings.clob_url,
-            gamma_url=settings.gamma_url,
+        self.hyperliquid = HyperliquidFeed(
+            api_url=settings.hyperliquid_api_url,
+            coin=settings.hyperliquid_coin,
         )
+        # Alias for backward compat (web app checks engine.polymarket)
+        self.polymarket = self.hyperliquid
 
         # ── Signal ───────────────────────────────────────────
         self.volatility = VolatilityEstimator(span=settings.vol_ewma_span)
@@ -211,15 +213,16 @@ class ArbitrageEngine:
     async def start(self):
         """Start the engine and all feeds."""
         logger.info("=" * 60)
-        logger.info("ARB ENGINE // 5-MIN BTC MARKETS")
+        logger.info("ARB ENGINE // SPOT vs PERP ARBITRAGE")
         logger.info(f"Mode: {self.settings.trading_mode.upper()}")
         logger.info(f"Bankroll: ${self.stats.bankroll:,.2f}")
+        logger.info(f"Exchange: Hyperliquid ({self.settings.hyperliquid_coin}-PERP)")
         logger.info("=" * 60)
 
         self._running = True
 
         # Start feeds concurrently
-        await self.polymarket.start()
+        await self.hyperliquid.start()
 
         feed_tasks = [
             asyncio.create_task(self.binance.start()),
@@ -242,7 +245,7 @@ class ArbitrageEngine:
         finally:
             self._running = False
             await self.order_manager.cancel_all()
-            await self.polymarket.stop()
+            await self.hyperliquid.stop()
             for t in feed_tasks:
                 t.cancel()
 
@@ -262,23 +265,20 @@ class ArbitrageEngine:
 
                 # ── Refresh markets periodically ─────────────
                 if time.time() - self._last_market_scan > self.settings.market_scan_interval:
-                    self._active_markets = await self.polymarket.discover_5min_btc_markets()
+                    self._active_markets = await self.hyperliquid.discover_5min_btc_markets()
                     self._last_market_scan = time.time()
                     if self._active_markets:
                         for m in self._active_markets:
-                            stream.log("SCAN", f"Market: {m.question[:50]} (expires {m.seconds_to_expiry:.0f}s)")
+                            stream.log("SCAN", f"{m.question} (window {m.seconds_to_expiry:.0f}s)")
                     else:
-                        stream.log("SCAN", "No active BTC markets found — check terminal logs for details")
+                        stream.log("SCAN", "Hyperliquid feed unavailable — retrying...")
 
                 # ── Check existing order fills ───────────────
-                mid = self.binance.last_price or 0
-                poly_mid = 0.5  # default
-                for market in self._active_markets:
-                    book = await self.polymarket.get_orderbook(market.yes_token_id)
-                    if book.mid_price > 0:
-                        poly_mid = book.mid_price
-                        break
-                await self.order_manager.check_fills(current_mid=poly_mid)
+                hl_mid = await self.hyperliquid.get_midpoint(self.settings.hyperliquid_coin)
+                if hl_mid and hl_mid > 0:
+                    await self.order_manager.check_fills(current_mid=hl_mid)
+                else:
+                    await self.order_manager.check_fills(current_mid=self.binance.last_price or 0)
 
                 # ── Skip if no price data ────────────────────
                 if self.binance.last_price is None:
@@ -312,37 +312,61 @@ class ArbitrageEngine:
     # ── Market Evaluation Pipeline ───────────────────────────
 
     async def _evaluate_market(self, market: Market):
-        """Full pipeline for a single market: signal → size → execute."""
+        """Full pipeline for spot-vs-perp arbitrage: signal → size → execute.
 
-        # 1. Get orderbook
-        book = await self.polymarket.get_orderbook(market.yes_token_id)
+        Instead of binary YES/NO prediction markets, we detect when the
+        Hyperliquid BTC-PERP price diverges from Binance/Coinbase spot,
+        then trade the convergence.
+        """
+
+        # 1. Get Hyperliquid orderbook
+        book = await self.hyperliquid.get_orderbook(market.yes_token_id)
         if book.spread <= 0 or book.mid_price <= 0:
             return
 
+        hl_mid = book.mid_price  # Hyperliquid perp price
+
         # 2. Spot data
+        spot_price = self.binance.last_price
+        if not spot_price or spot_price <= 0:
+            return
+
         spot_delta = self.binance.get_delta(seconds=10)
         vol = self.volatility.current
         if vol is None:
             return
 
-        # 3. Cross-validate with Coinbase (improvement: dual feed)
+        # 3. Cross-validate with Coinbase
         coinbase_delta = self.coinbase.get_delta(seconds=10) if self.coinbase.connected else None
+        coinbase_price = self.coinbase.last_price if self.coinbase.connected else None
         if coinbase_delta is not None:
-            # If feeds disagree on direction, reduce confidence
             if (spot_delta > 0) != (coinbase_delta > 0) and abs(spot_delta) > 5:
-                spot_delta *= 0.5  # dampen signal
+                spot_delta *= 0.5
 
-        # 4. Bayesian update
+        # Average spot price from available feeds
+        if coinbase_price and coinbase_price > 0:
+            avg_spot = (spot_price + coinbase_price) / 2.0
+        else:
+            avg_spot = spot_price
+
+        # 4. Compute spread: perp premium/discount vs spot
+        # Normalized spread: (perp - spot) / spot
+        spread_pct = (hl_mid - avg_spot) / avg_spot
+        # Map to 0-1 range for Bayesian: 0.5 = no spread, >0.5 = perp premium
+        normalized_price = 0.5 + spread_pct * 10  # amplify: 0.1% spread → 0.501
+        normalized_price = max(0.01, min(0.99, normalized_price))
+
+        # 5. Bayesian update
         bayes_state = self.bayesian.update(
             spot_delta=spot_delta,
             volatility=vol,
             book_imbalance=book.get_imbalance(),
         )
-        fair_price = self.bayesian.fair_price_yes
+        fair_price = self.bayesian.fair_price_yes  # fair value of convergence
 
-        # 5. Edge detection
+        # 6. Edge detection — use normalized spread
         edge = self.edge_detector.evaluate(
-            poly_price=book.mid_price,
+            poly_price=normalized_price,
             fair_price=fair_price,
             volatility=vol,
         )
@@ -353,23 +377,32 @@ class ArbitrageEngine:
 
         self.stats.signals_generated += 1
 
-        # 6. Kelly sizing
-        buy_price = book.best_ask if edge.direction == "BUY_YES" else (1 - book.best_bid)
-        odds = KellySizer.binary_odds(buy_price)
-        win_prob = fair_price if edge.direction == "BUY_YES" else (1 - fair_price)
+        # 7. Kelly sizing
+        # For perp arb: win_prob = probability spread converges
+        # spread_pct > 0 → perp overpriced vs spot → SHORT perp
+        # spread_pct < 0 → perp underpriced vs spot → LONG perp
+        if spread_pct > 0:
+            direction = "SHORT"
+            win_prob = min(0.85, 0.5 + abs(spread_pct) * 50)
+        else:
+            direction = "LONG"
+            win_prob = min(0.85, 0.5 + abs(spread_pct) * 50)
+
+        # Odds based on expected convergence profit
+        risk_reward = max(1.1, abs(spread_pct) * 1000)  # e.g., 0.1% → 1:1
         kelly_result = self.kelly.size(
             win_prob=win_prob,
-            odds=odds,
+            odds=risk_reward,
             bankroll=self.stats.bankroll,
         )
 
         if kelly_result.position_size <= 0:
             return
 
-        # 7. Market impact check
+        # 8. Market impact check
         impact = self.lmsr.estimate(
             order_size=kelly_result.position_size,
-            side="BUY" if edge.direction == "BUY_YES" else "SELL",
+            side="SELL" if direction == "SHORT" else "BUY",
             book=book,
         )
 
@@ -380,26 +413,24 @@ class ArbitrageEngine:
                 stream.log("FILTER", "impact too high, skipping")
                 return
 
-        # 8. Stoikov optimal price
+        # 9. Stoikov optimal price
         sigma2 = self.volatility.variance or 0.001
         quote = self.stoikov.quote(
-            mid_price=book.mid_price,
+            mid_price=hl_mid,
             sigma2=sigma2,
             time_remaining=market.time_remaining_normalized,
         )
 
-        # 9. Place order
-        if edge.direction == "BUY_YES":
-            token_id = market.yes_token_id
-            price = min(quote.bid, book.best_ask - 0.001)  # improve on ask
+        # 10. Place order on Hyperliquid
+        token_id = market.yes_token_id  # "BTC"
+        if direction == "LONG":
+            price = min(quote.bid, book.best_ask - 0.01)
             side = "BUY"
         else:
-            token_id = market.no_token_id
-            no_book = await self.polymarket.get_orderbook(market.no_token_id)
-            price = min(quote.bid, no_book.best_ask - 0.001) if no_book.asks else quote.bid
-            side = "BUY"
+            price = max(quote.ask if hasattr(quote, 'ask') else hl_mid + 0.01, book.best_bid + 0.01)
+            side = "SELL"
 
-        price = max(0.01, min(0.99, price))
+        price = round(price, 1)  # BTC price precision
 
         # Don't place if too many active orders
         if self.order_manager.active_count >= 5:
@@ -408,73 +439,72 @@ class ArbitrageEngine:
         order = await self.order_manager.place_order(
             token_id=token_id,
             side=side,
-            price=round(price, 2),
+            price=price,
             size=round(position_size, 2),
             ttl=self.settings.order_ttl_seconds,
         )
 
         stream.log(
             "TRADE",
-            f"{edge.direction} ${position_size:.0f} @ {price:.3f} z={edge.z_score}",
-            direction=edge.direction,
+            f"{direction} {side} ${position_size:.0f} @ ${price:,.1f} "
+            f"spread={spread_pct*100:.3f}% z={edge.z_score}",
+            direction=direction,
             size=round(position_size, 0),
-            price=round(price, 3),
+            price=round(price, 1),
             z_score=edge.z_score,
-            net_ev=edge.net_ev,
+            spread_pct=round(spread_pct * 100, 4),
         )
 
     # ── Market Resolution ────────────────────────────────────
 
     async def _check_market_resolution(self, market: Market):
-        """Check if a market has resolved and update P&L accordingly."""
+        """Handle window expiry for perp arbitrage.
+
+        For perpetual futures, windows don't 'resolve' — they roll.
+        We check if spread has converged and close positions.
+        """
         try:
-            # Fetch final outcome from Polymarket
-            resp = await self.polymarket._client.get(
-                f"{self.polymarket.gamma_url}/markets/{market.condition_id}",
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                resolved = data.get("resolved", False)
-                if resolved:
-                    outcome = data.get("outcome", "")
-                    self.on_market_resolved(market.yes_token_id, outcome)
-                else:
-                    # Market expired but not yet resolved; check prices
-                    # If YES price > 0.95, likely resolves YES
-                    book = await self.polymarket.get_orderbook(market.yes_token_id)
-                    if book.mid_price > 0.95:
-                        self.on_market_resolved(market.yes_token_id, "YES")
-                    elif book.mid_price < 0.05:
-                        self.on_market_resolved(market.yes_token_id, "NO")
-                    else:
-                        stream.log("RESOLVE", f"Market {market.condition_id[:8]} expired, awaiting resolution")
+            hl_mid = await self.hyperliquid.get_midpoint(self.settings.hyperliquid_coin)
+            spot_price = self.binance.last_price
+            if not hl_mid or not spot_price:
+                return
+
+            spread_pct = (hl_mid - spot_price) / spot_price
+            spread_bps = abs(spread_pct) * 10000  # basis points
+
+            # If spread has converged (< 2 bps), realize profits
+            if spread_bps < 2:
+                self._realize_perp_pnl(hl_mid)
+                stream.log("RESOLVE", f"Spread converged ({spread_bps:.1f}bps), window closed")
+            else:
+                stream.log("RESOLVE", f"Window expired, spread={spread_bps:.1f}bps — positions carry over")
+
         except Exception:
-            logger.exception(f"Failed to check resolution for {market.condition_id[:8]}")
+            logger.exception("Failed to check window expiry")
 
     # ── Hedge Execution ──────────────────────────────────────
 
     async def _execute_hedge(self, hedge_state):
-        """Place hedge orders to reduce directional exposure."""
-        if not self._active_markets:
+        """Place hedge orders to reduce directional exposure on Hyperliquid."""
+        coin = self.settings.hyperliquid_coin
+        book = await self.hyperliquid.get_orderbook(coin)
+        if not book.asks or not book.bids:
             return
 
-        market = self._active_markets[0]
-        if hedge_state.hedge_side == "BUY_YES":
-            token_id = market.yes_token_id
-        else:
-            token_id = market.no_token_id
+        # For perps: reduce exposure by trading opposite side
+        if hedge_state.hedge_side == "BUY_YES":  # too short → buy
+            price = book.best_ask
+            side = "BUY"
+        else:  # too long → sell
+            price = book.best_bid
+            side = "SELL"
 
-        book = await self.polymarket.get_orderbook(token_id)
-        if not book.asks:
-            return
-
-        price = book.best_ask
         size = min(hedge_state.hedge_needed, self.settings.max_position_size * 0.5)
 
         await self.order_manager.place_order(
-            token_id=token_id,
-            side="BUY",
-            price=round(price, 2),
+            token_id=coin,
+            side=side,
+            price=round(price, 1),
             size=round(size, 2),
             ttl=30.0,
         )
@@ -484,9 +514,8 @@ class ArbitrageEngine:
     def _on_fill(self, order: Order):
         """Called when an order is filled.
 
-        In live mode, P&L is only realized when the 5-min market resolves.
-        We track the cost of the position here and update bankroll on resolution.
-        In paper mode, we simulate fill cost deduction.
+        For perp arbitrage: margin is allocated from bankroll.
+        P&L is realized when the position is closed (spread converges).
         """
         self.stats.total_trades += 1
 
@@ -496,18 +525,17 @@ class ArbitrageEngine:
         # Update hedge tracker
         self.hedge.on_fill(order.side.value, order.size)
 
-        # Deduct the cost of buying the position from bankroll
-        # When buying YES at price P for size S USDC, we spend S USDC
-        # If market resolves YES, we get back S / P USDC (payout = 1/price per share)
-        # If market resolves NO, we lose the S USDC
-        cost = order.filled_size if order.filled_size > 0 else order.size
-        self.stats.bankroll -= cost
+        # For perp trading, we track margin allocation (not full cost)
+        # Using 5x effective leverage: margin = size / 5
+        margin = (order.filled_size if order.filled_size > 0 else order.size) * 0.2
+        self.stats.bankroll -= margin
 
+        fill_price = order.filled_price if order.filled_price > 0 else order.price
         stream.log(
             "FILL",
-            f"{order.side.value} ${cost:.2f} @ {order.filled_price:.3f} | bankroll=${self.stats.bankroll:.2f}",
+            f"{order.side.value} ${order.size:.2f} @ ${fill_price:,.1f} margin=${margin:.2f} | bankroll=${self.stats.bankroll:.2f}",
             order_id=order.id,
-            cost=round(cost, 2),
+            margin=round(margin, 2),
         )
 
         # Update peak
@@ -519,56 +547,48 @@ class ArbitrageEngine:
         if dd > self.stats.max_drawdown:
             self.stats.max_drawdown = dd
 
-    # ── Resolution Callback (for production) ─────────────────
+    # ── P&L Realization ─────────────────────────────────────
 
-    def on_market_resolved(self, market_id: str, outcome: str):
-        """
-        Called when a 5-min market resolves.
+    def _realize_perp_pnl(self, current_price: float):
+        """Realize P&L for perp positions when spread converges.
 
-        Checks filled orders for this market and updates bankroll
-        with actual realized P&L.
+        For each filled order, compute unrealized P&L and add to bankroll.
         """
-        # Find all filled orders for this market
         for order in self.order_manager.get_recent_fills(100):
-            if order.token_id != market_id:
-                continue
-
-            fill_price = order.filled_price
+            fill_price = order.filled_price if order.filled_price > 0 else order.price
             fill_size = order.filled_size if order.filled_size > 0 else order.size
 
-            # Payout: if outcome matches our side, we get $1 per share
-            # Shares bought = fill_size / fill_price
-            shares = fill_size / fill_price if fill_price > 0 else 0
+            if fill_price <= 0:
+                continue
 
-            is_yes_token = (order.token_id == market_id)  # simplified check
-            won = (outcome.upper() == "YES" and order.side == OrderSide.BUY)
+            # Compute P&L based on price movement
+            # BUY: profit when price goes up; SELL: profit when price goes down
+            price_change_pct = (current_price - fill_price) / fill_price
+            if order.side == OrderSide.SELL:
+                price_change_pct = -price_change_pct
 
-            if won:
-                # Payout = shares * $1.00; we already deducted fill_size
-                payout = shares
-                profit = payout - fill_size
-                self.stats.total_pnl += profit
-                self.stats.bankroll += payout  # return principal + profit
+            pnl = fill_size * price_change_pct
+
+            if pnl > 0:
+                self.stats.total_pnl += pnl
+                self.stats.bankroll += pnl + fill_size * 0.2  # return margin + profit
                 self.stats.wins += 1
                 self.stats.consecutive_losses = 0
-                stream.log("RESOLVE", f"WIN +${profit:.2f} | {market_id[:8]} → {outcome}")
+                stream.log("P&L", f"WIN +${pnl:.2f} | {order.side.value} @ ${fill_price:,.0f} → ${current_price:,.0f}")
             else:
-                # We already deducted the cost on fill; position is now worthless
-                loss = fill_size
-                self.stats.total_pnl -= loss
+                self.stats.total_pnl += pnl
+                self.stats.bankroll += max(0, fill_size * 0.2 + pnl)  # return remaining margin
                 self.stats.losses += 1
                 self.stats.consecutive_losses += 1
-                stream.log("RESOLVE", f"LOSS -${loss:.2f} | {market_id[:8]} → {outcome}")
+                stream.log("P&L", f"LOSS ${pnl:.2f} | {order.side.value} @ ${fill_price:,.0f} → ${current_price:,.0f}")
 
-        # Update peak / drawdown after resolution
+        # Update peak / drawdown
         if self.stats.bankroll > self.stats.peak_bankroll:
             self.stats.peak_bankroll = self.stats.bankroll
         dd = self.stats.current_drawdown
         if dd > self.stats.max_drawdown:
             self.stats.max_drawdown = dd
 
-        # Reset per-market state
+        # Reset per-window state
         self.bayesian.reset()
         self.stoikov.on_expiry()
-
-        stream.log("RESOLVE", f"Market {market_id[:8]} resolved: {outcome}")

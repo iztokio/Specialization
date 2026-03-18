@@ -1,8 +1,9 @@
 """
 Z-score edge detection with adaptive threshold.
 
-Detects when Polymarket price significantly deviates from the Bayesian
-fair price, indicating an exploitable edge.
+Detects when the exchange price (Hyperliquid perp) significantly deviates
+from the Bayesian fair price (derived from spot feeds), indicating an
+exploitable spread for cross-exchange arbitrage.
 
 Improvement over fixed threshold: threshold adapts to volatility regime.
 In low-vol environments, even small dislocations are significant.
@@ -47,7 +48,7 @@ class EdgeDetector:
         window: int = 100,
         base_z_threshold: float = 2.0,
         min_net_ev: float = 0.003,
-        fee_rate: float = 0.02,  # Polymarket ~2% effective cost
+        fee_rate: float = 0.00035,  # Hyperliquid taker fee 0.035%
         min_confidence: float = 0.60,
     ):
         self._window = window

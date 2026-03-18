@@ -185,12 +185,12 @@ function updateModuleStatus(data) {
     setStatus('sPolymarket', data.polymarket_connected);
     if (data.polymarket_connected) {
         const el = document.getElementById('sPolymarket');
-        const mCount = data.polymarket_markets || 0;
         if (el) {
-            if (mCount > 0) {
-                el.textContent = 'ONLINE (' + mCount + ' markets)';
+            if (data.hyperliquid_live) {
+                el.textContent = 'LIVE';
+                el.className = 'status-value online';
             } else {
-                el.textContent = 'ONLINE (scanning...)';
+                el.textContent = 'ONLINE (paper)';
                 el.className = 'status-value warning';
             }
         }

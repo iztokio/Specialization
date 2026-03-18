@@ -202,12 +202,15 @@ def get_pnl_history():
 def get_module_status():
     if engine is None:
         return jsonify({"running": False})
-    polymarket_connected = engine.polymarket._client is not None
+    hl_connected = engine.hyperliquid._client is not None
+    hl_live = engine.order_manager.hl_exchange is not None
     return jsonify({
         "running": True,
         "binance_connected": engine.binance.connected,
         "coinbase_connected": engine.coinbase.connected,
-        "polymarket_connected": polymarket_connected,
+        "polymarket_connected": hl_connected,  # reuse key for UI compat
+        "hyperliquid_connected": hl_connected,
+        "hyperliquid_live": hl_live,
         "polymarket_markets": len(engine._active_markets),
         "binance_price": engine.binance.last_price,
         "bayesian_posterior": round(engine.bayesian.posterior, 4),
@@ -218,7 +221,7 @@ def get_module_status():
         "circuit_reason": engine.circuit.reason if engine.circuit.is_tripped else "",
         "active_orders": engine.order_manager.active_count,
         "trading_mode": engine.settings.trading_mode,
-        "clob_connected": engine.order_manager.clob_client is not None if engine.settings.trading_mode == "live" else None,
+        "clob_connected": hl_live if engine.settings.trading_mode == "live" else None,
     })
 
 
@@ -353,8 +356,8 @@ def on_start_engine(data=None):
 
     engine = ArbitrageEngine(s)
 
-    # Initialize CLOB client for live mode
-    _clob_pk = None
+    # Initialize exchange client for live mode
+    _live_pk = None
     if s.trading_mode == "live":
         pk = os.environ.get("PRIVATE_KEY", s.private_key)
         if not pk or pk in ("", "your_polygon_wallet_private_key"):
@@ -364,8 +367,8 @@ def on_start_engine(data=None):
                 emit("engine_error", {"error": "No private key. Connect wallet first or set PRIVATE_KEY in .env"})
                 engine = None
                 return
-        _clob_pk = pk
-        # Start in paper mode; background thread will upgrade to live if CLOB connects
+        _live_pk = pk
+        # Start in paper mode; background thread will upgrade to live if exchange connects
         engine.order_manager.mode = "paper"
 
     # Record P&L periodically
@@ -390,52 +393,65 @@ def on_start_engine(data=None):
     engine._on_fill = patched_on_fill
     engine.order_manager._fill_callbacks = [patched_on_fill]
 
-    # Background CLOB client init (non-blocking)
-    def _init_clob_background(eng, pk_val, settings):
-        """Try to connect to Polymarket CLOB API in background."""
+    # Background exchange client init (non-blocking)
+    def _init_exchange_background(eng, pk_val, settings):
+        """Try to connect to Hyperliquid exchange API in background."""
         import time as _time
         try:
-            from py_clob_client.client import ClobClient
-        except ImportError:
-            stream.log("WARN", "py-clob-client not installed. Running paper mode.")
+            from hyperliquid.info import Info
+            from hyperliquid.exchange import Exchange
+            from hyperliquid.utils import constants
+            from eth_account import Account
+        except ImportError as e:
+            stream.log("WARN", f"hyperliquid-python-sdk not installed: {e}. Running paper mode.")
             return
 
         last_err = None
         for attempt in range(3):
             if eng is None:
-                return  # Engine was stopped
-            try:
-                funder_val = settings.polymarket_funder or os.environ.get("POLYMARKET_FUNDER") or None
-                clob_client = ClobClient(
-                    settings.clob_url,
-                    key=pk_val,
-                    chain_id=settings.chain_id,
-                    signature_type=0,  # EOA
-                    funder=funder_val,
-                )
-                creds = clob_client.create_or_derive_api_creds()
-                clob_client.set_api_creds(creds)
-                eng.order_manager.clob_client = clob_client
-                eng.order_manager.mode = "live"
-                stream.log("CLOB", "Polymarket CLOB connected — LIVE trading enabled")
-                logger.info("Polymarket CLOB client initialized for LIVE trading")
                 return
+
+            try:
+                # Derive address from private key
+                if not pk_val.startswith("0x"):
+                    pk_val_hex = "0x" + pk_val
+                else:
+                    pk_val_hex = pk_val
+                account = Account.from_key(pk_val_hex)
+                address = account.address
+
+                api_url = settings.hyperliquid_api_url or constants.MAINNET_API_URL
+
+                info = Info(api_url, skip_ws=True)
+                exchange = Exchange(account, api_url)
+
+                # Test connection by fetching user state
+                user_state = info.user_state(address)
+                logger.info(f"Hyperliquid connected: {address[:10]}... margin={user_state.get('marginSummary', {}).get('accountValue', 'N/A')}")
+
+                eng.order_manager.hl_exchange = exchange
+                eng.order_manager.hl_info = info
+                eng.order_manager.hl_address = address
+                eng.order_manager.mode = "live"
+
+                stream.log("EXCHANGE", f"Hyperliquid connected — LIVE trading enabled ({address[:10]}...)")
+                return
+
             except Exception as e:
                 last_err = e
-                logger.warning(f"CLOB init attempt {attempt+1}/3 failed: {e}")
+                logger.warning(f"Hyperliquid init attempt {attempt+1}/3 failed: {e}")
                 _time.sleep(2 ** attempt)
 
-        logger.error(f"All CLOB init attempts failed: {last_err}")
-        stream.log("WARN", f"CLOB API unreachable — staying in PAPER mode. Error: {last_err}")
-        stream.log("WARN", "Polymarket trading API may be geo-blocked. Try using a VPN (US).")
+        logger.error(f"All Hyperliquid init attempts failed: {last_err}")
+        stream.log("WARN", f"Hyperliquid API unreachable — staying in PAPER mode. Error: {last_err}")
 
-    if _clob_pk:
-        clob_thread = threading.Thread(
-            target=_init_clob_background,
-            args=(engine, _clob_pk, s),
+    if _live_pk:
+        exchange_thread = threading.Thread(
+            target=_init_exchange_background,
+            args=(engine, _live_pk, s),
             daemon=True,
         )
-        clob_thread.start()
+        exchange_thread.start()
 
     def run_engine():
         global engine_loop
