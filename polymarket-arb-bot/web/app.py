@@ -30,7 +30,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from eth_account import Account
 
 from config.settings import Settings
-from execution.wallet_balance import fetch_balances
+from execution.bridge import BridgeManager
+from execution.wallet_balance import (
+    fetch_balances,
+    fetch_arbitrum_balance,
+    fetch_hyperliquid_balance,
+    fetch_funding_rate,
+    fetch_all_balances,
+)
 from engine.arbitrage import ArbitrageEngine
 from monitoring.logger import TrainingStream, get_logger, stream
 
@@ -51,6 +58,7 @@ engine_loop: asyncio.AbstractEventLoop | None = None
 settings: Settings | None = None
 pnl_history: list[dict] = []
 wallet_state: dict | None = None
+bridge_manager: BridgeManager | None = None
 
 
 def get_or_create_settings() -> Settings:
@@ -204,11 +212,14 @@ def get_module_status():
         return jsonify({"running": False})
     hl_connected = engine.hyperliquid._client is not None
     hl_live = engine.order_manager.hl_exchange is not None
+
+    margin = engine.margin_monitor.to_dict() if hasattr(engine, 'margin_monitor') else {}
+
     return jsonify({
         "running": True,
         "binance_connected": engine.binance.connected,
         "coinbase_connected": engine.coinbase.connected,
-        "polymarket_connected": hl_connected,  # reuse key for UI compat
+        "polymarket_connected": hl_connected,
         "hyperliquid_connected": hl_connected,
         "hyperliquid_live": hl_live,
         "polymarket_markets": len(engine._active_markets),
@@ -222,6 +233,18 @@ def get_module_status():
         "active_orders": engine.order_manager.active_count,
         "trading_mode": engine.settings.trading_mode,
         "clob_connected": hl_live if engine.settings.trading_mode == "live" else None,
+        # Margin & funding
+        "margin_ratio": margin.get("margin_ratio", 0),
+        "margin_available": margin.get("margin_available", 0),
+        "margin_healthy": margin.get("is_healthy", True),
+        "margin_warning": margin.get("warning", ""),
+        "safe_to_trade": margin.get("safe_to_trade", True),
+        "funding_rate_bps": margin.get("funding_rate", 0),
+        "funding_annualized": margin.get("funding_annualized_pct", 0),
+        "mark_price": margin.get("mark_price", 0),
+        "oracle_price": margin.get("oracle_price", 0),
+        "hl_account_value": margin.get("account_value", 0),
+        "hl_positions": margin.get("positions", []),
     })
 
 
@@ -323,10 +346,140 @@ def wallet_balance():
 
 @app.route("/api/wallet/disconnect", methods=["POST"])
 def wallet_disconnect():
-    global wallet_state
+    global wallet_state, bridge_manager
     wallet_state = None
+    bridge_manager = None
     logger.info("Wallet disconnected")
     return jsonify({"status": "ok"})
+
+
+# ── Multi-Chain Balance API ──────────────────────────────────
+
+@app.route("/api/balances/all")
+def get_all_balances():
+    """Fetch balances across Hyperliquid, Arbitrum, and Polygon."""
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    s = get_or_create_settings()
+    data = fetch_all_balances(wallet_state["address"], s.hyperliquid_api_url)
+    return jsonify({"status": "ok", **data})
+
+
+@app.route("/api/balances/hyperliquid")
+def get_hl_balance():
+    """Fetch Hyperliquid trading account state."""
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    s = get_or_create_settings()
+    data = fetch_hyperliquid_balance(wallet_state["address"], s.hyperliquid_api_url)
+    return jsonify({"status": "ok", **data})
+
+
+@app.route("/api/balances/arbitrum")
+def get_arb_balance():
+    """Fetch Arbitrum USDC + ETH balances."""
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    data = fetch_arbitrum_balance(wallet_state["address"])
+    return jsonify({"status": "ok", **data})
+
+
+# ── Margin & Funding API ────────────────────────────────────
+
+@app.route("/api/margin")
+def get_margin():
+    """Get margin monitor state."""
+    if engine is not None and hasattr(engine, 'margin_monitor'):
+        return jsonify(engine.margin_monitor.to_dict())
+    # Fallback: fetch directly
+    if wallet_state is None:
+        return jsonify({"error": "No wallet connected"})
+    s = get_or_create_settings()
+    hl = fetch_hyperliquid_balance(wallet_state["address"], s.hyperliquid_api_url)
+    funding = fetch_funding_rate(s.hyperliquid_coin, s.hyperliquid_api_url)
+    from execution.margin_monitor import MarginMonitor
+    mm = MarginMonitor(s.hyperliquid_api_url, s.hyperliquid_coin)
+    mm.update(hl, funding)
+    return jsonify(mm.to_dict())
+
+
+@app.route("/api/funding")
+def get_funding():
+    """Fetch current funding rate."""
+    s = get_or_create_settings()
+    data = fetch_funding_rate(s.hyperliquid_coin, s.hyperliquid_api_url)
+    return jsonify(data)
+
+
+# ── Bridge API ───────────────────────────────────────────────
+
+def _get_bridge() -> BridgeManager:
+    global bridge_manager
+    if bridge_manager is None:
+        pk = ""
+        if wallet_state and wallet_state.get("private_key"):
+            pk = wallet_state["private_key"]
+        elif os.environ.get("PRIVATE_KEY"):
+            pk = os.environ["PRIVATE_KEY"]
+        s = get_or_create_settings()
+        bridge_manager = BridgeManager(private_key=pk, hl_api_url=s.hyperliquid_api_url)
+    return bridge_manager
+
+
+@app.route("/api/bridge/check", methods=["POST"])
+def bridge_check():
+    """Pre-flight check for deposit readiness."""
+    data = request.json or {}
+    amount = float(data.get("amount", 100))
+    result = _get_bridge().check_deposit_readiness(amount)
+    return jsonify(result)
+
+
+@app.route("/api/bridge/deposit", methods=["POST"])
+def bridge_deposit():
+    """Deposit USDC from Arbitrum to Hyperliquid."""
+    data = request.json or {}
+    amount = float(data.get("amount", 0))
+    if amount <= 0:
+        return jsonify({"error": "Invalid amount"}), 400
+
+    result = _get_bridge().deposit_to_hyperliquid(amount)
+    return jsonify({
+        "success": result.success,
+        "tx_hash": result.tx_hash,
+        "error": result.error,
+        "gas_cost_eth": result.gas_cost_eth,
+    })
+
+
+@app.route("/api/bridge/withdraw", methods=["POST"])
+def bridge_withdraw():
+    """Withdraw USDC from Hyperliquid to Arbitrum."""
+    data = request.json or {}
+    amount = float(data.get("amount", 0))
+    if amount <= 0:
+        return jsonify({"error": "Invalid amount"}), 400
+
+    result = _get_bridge().withdraw_from_hyperliquid(amount)
+    return jsonify({
+        "success": result.success,
+        "tx_hash": result.tx_hash,
+        "error": result.error,
+    })
+
+
+@app.route("/api/bridge/guide")
+def bridge_guide():
+    """Get bridging instructions for a source chain."""
+    chain = request.args.get("chain", "ethereum")
+    guide = _get_bridge().get_bridge_guide(chain)
+    return jsonify(guide)
+
+
+@app.route("/api/bridge/history")
+def bridge_history():
+    """Get bridge operation history."""
+    return jsonify(_get_bridge().get_history())
 
 
 # ── Socket.IO events ────────────────────────────────────────

@@ -501,6 +501,98 @@ def get_module_status():
 
 
 # ═══════════════════════════════════════════════════════════
+#  Multi-Chain Balance & Margin API (demo stubs)
+# ═══════════════════════════════════════════════════════════
+
+@app.route("/api/balances/all")
+def get_all_balances():
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    from execution.wallet_balance import fetch_all_balances
+    s = Settings()
+    data = fetch_all_balances(wallet_state["address"], s.hyperliquid_api_url)
+    return jsonify({"status": "ok", **data})
+
+@app.route("/api/balances/hyperliquid")
+def get_hl_balance():
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    from execution.wallet_balance import fetch_hyperliquid_balance
+    data = fetch_hyperliquid_balance(wallet_state["address"])
+    return jsonify({"status": "ok", **data})
+
+@app.route("/api/balances/arbitrum")
+def get_arb_balance():
+    if wallet_state is None:
+        return jsonify({"status": "error", "error": "No wallet connected"}), 400
+    from execution.wallet_balance import fetch_arbitrum_balance
+    data = fetch_arbitrum_balance(wallet_state["address"])
+    return jsonify({"status": "ok", **data})
+
+@app.route("/api/margin")
+def get_margin():
+    if wallet_state is None:
+        return jsonify({"error": "No wallet connected"})
+    from execution.wallet_balance import fetch_hyperliquid_balance, fetch_funding_rate
+    from execution.margin_monitor import MarginMonitor
+    s = Settings()
+    hl = fetch_hyperliquid_balance(wallet_state["address"], s.hyperliquid_api_url)
+    funding = fetch_funding_rate(s.hyperliquid_coin, s.hyperliquid_api_url)
+    mm = MarginMonitor(s.hyperliquid_api_url, s.hyperliquid_coin)
+    mm.update(hl, funding)
+    return jsonify(mm.to_dict())
+
+@app.route("/api/funding")
+def get_funding():
+    from execution.wallet_balance import fetch_funding_rate
+    s = Settings()
+    return jsonify(fetch_funding_rate(s.hyperliquid_coin, s.hyperliquid_api_url))
+
+@app.route("/api/bridge/check", methods=["POST"])
+def bridge_check():
+    data = request.json or {}
+    amount = float(data.get("amount", 100))
+    if wallet_state and wallet_state.get("private_key"):
+        from execution.bridge import BridgeManager
+        bm = BridgeManager(wallet_state["private_key"])
+        return jsonify(bm.check_deposit_readiness(amount))
+    return jsonify({"ready": False, "checks": [], "actions_needed": ["Connect wallet first"]})
+
+@app.route("/api/bridge/deposit", methods=["POST"])
+def bridge_deposit():
+    data = request.json or {}
+    amount = float(data.get("amount", 0))
+    if not wallet_state or not wallet_state.get("private_key"):
+        return jsonify({"success": False, "error": "No wallet connected"}), 400
+    from execution.bridge import BridgeManager
+    bm = BridgeManager(wallet_state["private_key"])
+    result = bm.deposit_to_hyperliquid(amount)
+    return jsonify({"success": result.success, "tx_hash": result.tx_hash, "error": result.error, "gas_cost_eth": result.gas_cost_eth})
+
+@app.route("/api/bridge/withdraw", methods=["POST"])
+def bridge_withdraw():
+    data = request.json or {}
+    amount = float(data.get("amount", 0))
+    if not wallet_state or not wallet_state.get("private_key"):
+        return jsonify({"success": False, "error": "No wallet connected"}), 400
+    from execution.bridge import BridgeManager
+    s = Settings()
+    bm = BridgeManager(wallet_state["private_key"], s.hyperliquid_api_url)
+    result = bm.withdraw_from_hyperliquid(amount)
+    return jsonify({"success": result.success, "tx_hash": result.tx_hash, "error": result.error})
+
+@app.route("/api/bridge/guide")
+def bridge_guide():
+    chain = request.args.get("chain", "ethereum")
+    from execution.bridge import BridgeManager
+    return jsonify(BridgeManager().get_bridge_guide(chain))
+
+@app.route("/api/bridge/history")
+def bridge_history():
+    return jsonify([])
+
+
+# ═══════════════════════════════════════════════════════════
 #  Wallet API
 # ═══════════════════════════════════════════════════════════
 

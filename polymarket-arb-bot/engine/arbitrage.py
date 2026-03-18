@@ -20,8 +20,10 @@ from typing import Optional
 
 from config.settings import Settings
 from execution.hedge import HedgeManager
+from execution.margin_monitor import MarginMonitor
 from execution.order_manager import OrderManager, Order, OrderStatus, OrderSide
 from execution.stoikov import StoikovQuoter
+from execution.wallet_balance import fetch_hyperliquid_balance, fetch_funding_rate
 from feeds.binance_feed import BinanceFeed
 from feeds.coinbase_feed import CoinbaseFeed
 from feeds.hyperliquid_feed import HyperliquidFeed, Market, OrderBook
@@ -194,6 +196,13 @@ class ArbitrageEngine:
         self.order_manager = OrderManager(trading_mode=settings.trading_mode)
         self.hedge = HedgeManager(max_net_exposure=settings.max_position_size * 2)
 
+        # ── Margin Monitor ─────────────────────────────────────
+        self.margin_monitor = MarginMonitor(
+            api_url=settings.hyperliquid_api_url,
+            coin=settings.hyperliquid_coin,
+            min_margin_available=settings.min_margin_available,
+        )
+
         # ── State ────────────────────────────────────────────
         self.stats = EngineStats(
             bankroll=settings.initial_bankroll,
@@ -203,6 +212,7 @@ class ArbitrageEngine:
         self.circuit = CircuitBreaker(settings)
         self._running = False
         self._last_market_scan: float = 0.0
+        self._last_margin_check: float = 0.0
         self._active_markets: list[Market] = []
 
         # Register fill callback
@@ -262,6 +272,43 @@ class ArbitrageEngine:
                 if self.circuit.check(self.stats):
                     await asyncio.sleep(10)
                     continue
+
+                # ── Margin & funding check (live mode) ────────
+                if (self.settings.trading_mode == "live"
+                        and self.order_manager.hl_info
+                        and time.time() - self._last_margin_check > self.settings.margin_check_interval):
+                    try:
+                        hl_bal = fetch_hyperliquid_balance(
+                            self.order_manager.hl_address,
+                            self.settings.hyperliquid_api_url,
+                        )
+                        funding = fetch_funding_rate(
+                            self.settings.hyperliquid_coin,
+                            self.settings.hyperliquid_api_url,
+                        )
+                        margin_state = self.margin_monitor.update(hl_bal, funding)
+
+                        # Sync bankroll from real account value
+                        if hl_bal["account_value"] > 0:
+                            self.stats.bankroll = hl_bal["account_value"]
+                            if self.stats.bankroll > self.stats.peak_bankroll:
+                                self.stats.peak_bankroll = self.stats.bankroll
+
+                        # Log funding cost estimate
+                        if margin_state.funding_rate != 0 and self.stats.cycles % 100 == 0:
+                            cost_24h = self.margin_monitor.get_funding_cost_estimate(
+                                hl_bal.get("margin_used", 0), hours=24
+                            )
+                            if abs(cost_24h) > 0.01:
+                                stream.log(
+                                    "FUNDING",
+                                    f"Rate: {margin_state.funding_rate*10000:.2f}bps/hr "
+                                    f"({margin_state.funding_annualized_pct:.1f}%/yr) "
+                                    f"| 24h cost: ${cost_24h:.2f}"
+                                )
+                    except Exception:
+                        logger.exception("Margin check failed")
+                    self._last_margin_check = time.time()
 
                 # ── Refresh markets periodically ─────────────
                 if time.time() - self._last_market_scan > self.settings.market_scan_interval:
@@ -421,7 +468,16 @@ class ArbitrageEngine:
             time_remaining=market.time_remaining_normalized,
         )
 
-        # 10. Place order on Hyperliquid
+        # 10. Pre-trade margin check (live mode)
+        if self.settings.trading_mode == "live":
+            can_trade, reason = self.margin_monitor.can_open_position(
+                position_size, self.settings.max_leverage
+            )
+            if not can_trade:
+                stream.log("MARGIN", f"Trade blocked: {reason}")
+                return
+
+        # 11. Place order on Hyperliquid
         token_id = market.yes_token_id  # "BTC"
         if direction == "LONG":
             price = min(quote.bid, book.best_ask - 0.01)

@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     circuit_max_consecutive_losses: int = 15
     circuit_cooldown_seconds: float = 300.0  # 5 min cooldown
 
+    # ── Margin & Risk Monitoring ─────────────────────────────
+    min_margin_available: float = 50.0  # min free margin (USD) to allow trading
+    margin_check_interval: float = 10.0  # seconds between margin checks
+    funding_rate_warn_threshold: float = 0.01  # warn if annualized > 1%
+    max_leverage: float = 5.0  # max effective leverage
+
     # ── Logging / Data ───────────────────────────────────────
     log_level: str = "INFO"
     data_record_dir: str = "./data"

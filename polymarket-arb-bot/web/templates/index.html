@@ -131,6 +131,23 @@
                     <span class="status-label">Signals</span>
                     <span class="status-value" id="sSignals">0 / 0 rejected</span>
                 </div>
+                <!-- Margin & Funding -->
+                <div class="status-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+                    <span class="status-label">HL Account</span>
+                    <span class="status-value" id="sHlAccount">—</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Margin</span>
+                    <span class="status-value" id="sMargin">—</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Funding Rate</span>
+                    <span class="status-value" id="sFunding">—</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Mark / Oracle</span>
+                    <span class="status-value" id="sMarkOracle">—</span>
+                </div>
             </div>
         </div>
 
@@ -293,8 +310,9 @@
                 <div id="walletStep1">
                     <div class="wallet-info">
                         <p>Connect your wallet to trade on Hyperliquid with real funds.</p>
-                        <p class="dim" style="margin-top:8px">Network: <strong>Polygon Mainnet</strong> (Chain ID: 137)</p>
-                        <p class="dim">Currency: <strong>USDC</strong> + POL for gas</p>
+                        <p class="dim" style="margin-top:8px">Trading: <strong>Hyperliquid L1</strong> (no gas for trading)</p>
+                        <p class="dim">Deposits: <strong>Arbitrum One</strong> (USDC + ETH for gas)</p>
+                        <p class="dim" style="font-size:11px;margin-top:4px">Same private key works on all EVM chains</p>
                     </div>
 
                     <div class="wallet-options">
@@ -354,31 +372,70 @@
                                 <span class="status-label">Address</span>
                                 <span class="status-value" id="wAddress" style="font-size:11px">—</span>
                             </div>
-                            <div class="status-row">
-                                <span class="status-label">Network</span>
-                                <span class="status-value online">Polygon Mainnet</span>
+
+                            <!-- Hyperliquid -->
+                            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+                                <strong style="font-size:11px;color:var(--accent-green)">HYPERLIQUID (Trading)</strong>
                             </div>
                             <div class="status-row">
-                                <span class="status-label">USDC Balance</span>
+                                <span class="status-label">Account Value</span>
+                                <span class="status-value" id="wHlValue">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Free Margin</span>
+                                <span class="status-value" id="wHlMargin">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Positions</span>
+                                <span class="status-value" id="wHlPositions">checking...</span>
+                            </div>
+
+                            <!-- Arbitrum -->
+                            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+                                <strong style="font-size:11px;color:var(--accent-cyan)">ARBITRUM (Deposits)</strong>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">USDC</span>
+                                <span class="status-value" id="wArbUsdc">checking...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">ETH (gas)</span>
+                                <span class="status-value" id="wArbEth">checking...</span>
+                            </div>
+
+                            <!-- Polygon (legacy) -->
+                            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+                                <strong style="font-size:11px;color:var(--text-secondary)">POLYGON (Legacy)</strong>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">USDC</span>
                                 <span class="status-value" id="wBalance">checking...</span>
                             </div>
                             <div class="status-row">
                                 <span class="status-label">POL (gas)</span>
                                 <span class="status-value" id="wMatic">checking...</span>
                             </div>
-                            <div class="status-row">
-                                <span class="status-label">Hyperliquid Allowance</span>
-                                <span class="status-value" id="wAllowance">checking...</span>
+                        </div>
+
+                        <!-- Bridge Controls -->
+                        <div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border)">
+                            <strong style="font-size:12px">Bridge: Arbitrum → Hyperliquid</strong>
+                            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+                                <input type="number" id="bridgeAmount" placeholder="USDC amount"
+                                       style="flex:1;padding:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:12px" min="1" step="10">
+                                <button class="btn btn-success" onclick="bridgeDeposit()" style="font-size:12px">Deposit →</button>
+                                <button class="btn btn-secondary" onclick="bridgeWithdraw()" style="font-size:12px">← Withdraw</button>
                             </div>
-                            <div class="status-row">
-                                <span class="status-label">API Keys</span>
-                                <span class="status-value" id="wApiKeys">checking...</span>
+                            <div id="bridgeStatus" class="dim" style="margin-top:6px;font-size:11px"></div>
+                            <div style="margin-top:6px">
+                                <button class="btn btn-sm" onclick="bridgeCheck()" style="font-size:11px">Pre-flight Check</button>
+                                <button class="btn btn-sm" onclick="showBridgeGuide()" style="font-size:11px">Other Chains →</button>
                             </div>
                         </div>
 
                         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
                             <button class="btn btn-success" onclick="switchToLive()">Switch to LIVE Mode</button>
-                            <button class="btn btn-secondary" onclick="refreshBalance()">Refresh Balance</button>
+                            <button class="btn btn-secondary" onclick="refreshAllBalances()">Refresh All</button>
                             <button class="btn btn-secondary" onclick="disconnectWallet()">Disconnect</button>
                             <button class="btn btn-secondary" onclick="closeWallet()">Close</button>
                         </div>

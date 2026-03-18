@@ -182,17 +182,19 @@ function updateStats(data) {
 function updateModuleStatus(data) {
     setStatus('sBinance', data.binance_connected);
     setStatus('sCoinbase', data.coinbase_connected);
-    setStatus('sPolymarket', data.polymarket_connected);
-    if (data.polymarket_connected) {
-        const el = document.getElementById('sPolymarket');
-        if (el) {
-            if (data.hyperliquid_live) {
-                el.textContent = 'LIVE';
-                el.className = 'status-value online';
-            } else {
-                el.textContent = 'ONLINE (paper)';
-                el.className = 'status-value warning';
-            }
+
+    // Hyperliquid status
+    const hlEl = document.getElementById('sHyperliquid');
+    if (hlEl) {
+        if (data.hyperliquid_live) {
+            hlEl.textContent = 'LIVE';
+            hlEl.className = 'status-value online';
+        } else if (data.hyperliquid_connected) {
+            hlEl.textContent = 'ONLINE (paper)';
+            hlEl.className = 'status-value warning';
+        } else {
+            hlEl.textContent = 'OFFLINE';
+            hlEl.className = 'status-value offline';
         }
     }
 
@@ -204,13 +206,47 @@ function updateModuleStatus(data) {
     setText('sOrders', data.active_orders || 0);
     setText('sSignals', (data.signals_generated || 0) + ' generated');
 
-    const circuitEl = document.getElementById('sCircuit');
-    if (data.circuit_tripped) {
-        circuitEl.textContent = 'TRIPPED: ' + data.circuit_reason;
+    // Margin & Funding
+    if (data.hl_account_value > 0) {
+        setText('sHlAccount', '$' + num(data.hl_account_value));
+    }
+    if (data.margin_ratio !== undefined) {
+        const marginEl = document.getElementById('sMargin');
+        if (marginEl) {
+            const ratio = data.margin_ratio || 0;
+            marginEl.textContent = ratio.toFixed(1) + '% used | $' + num(data.margin_available || 0) + ' free';
+            if (ratio > 90) {
+                marginEl.className = 'status-value offline';
+            } else if (ratio > 75) {
+                marginEl.className = 'status-value warning';
+            } else {
+                marginEl.className = 'status-value online';
+            }
+        }
+    }
+    if (data.funding_rate_bps !== undefined) {
+        const fundingBps = data.funding_rate_bps || 0;
+        const annual = data.funding_annualized || 0;
+        setText('sFunding', fundingBps.toFixed(2) + ' bps/hr (' + annual.toFixed(1) + '%/yr)');
+    }
+    if (data.mark_price > 0 || data.oracle_price > 0) {
+        setText('sMarkOracle', '$' + num(data.mark_price || 0, 0) + ' / $' + num(data.oracle_price || 0, 0));
+    }
+
+    // Margin warning
+    if (data.margin_warning) {
+        const circuitEl = document.getElementById('sCircuit');
+        circuitEl.textContent = data.margin_warning;
         circuitEl.className = 'status-value offline';
     } else {
-        circuitEl.textContent = 'OK';
-        circuitEl.className = 'status-value online';
+        const circuitEl = document.getElementById('sCircuit');
+        if (data.circuit_tripped) {
+            circuitEl.textContent = 'TRIPPED: ' + data.circuit_reason;
+            circuitEl.className = 'status-value offline';
+        } else {
+            circuitEl.textContent = 'OK';
+            circuitEl.className = 'status-value online';
+        }
     }
 
     // Update mode badge
@@ -219,10 +255,10 @@ function updateModuleStatus(data) {
     badge.textContent = mode;
     badge.className = 'mode-badge' + (data.trading_mode === 'live' ? ' live' : '');
 
-    // Show CLOB connection status for live mode
-    if (data.trading_mode === 'live' && data.clob_connected === false) {
+    // Safe to trade indicator
+    if (data.trading_mode === 'live' && data.safe_to_trade === false) {
         const circuitEl = document.getElementById('sCircuit');
-        circuitEl.textContent = 'CLOB NOT CONNECTED';
+        circuitEl.textContent = 'UNSAFE: ' + (data.margin_warning || 'margin insufficient');
         circuitEl.className = 'status-value offline';
     }
 }
@@ -534,25 +570,21 @@ function onWalletConnected(data) {
     setText('wAddress', data.address || '—');
     setText('wBalance', data.usdc_balance || 'N/A');
     setText('wMatic', data.matic_balance || 'N/A');
-    setText('wAllowance', data.allowance || 'Will be set on first trade');
-    setText('wApiKeys', data.api_keys ? 'Configured' : 'Will auto-generate');
 
-    // Update header button with balance
+    // Update header button
     const btn = document.getElementById('btnWallet');
     btn.classList.add('connected');
     const addr = data.address || '';
-    const balStr = walletUsdcBalance > 0 ? ' ($' + walletUsdcBalance.toFixed(2) + ')' : '';
     document.getElementById('walletLabel').textContent =
-        addr ? addr.slice(0, 6) + '...' + addr.slice(-4) + balStr : 'Connected';
+        addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : 'Connected';
     document.getElementById('walletIcon').textContent = '\u2705';
 
-    // Auto-set bankroll from wallet balance if it's set and less than default
+    // Auto-set bankroll from wallet balance if needed
     if (walletUsdcBalance > 0) {
         const cfgBankroll = document.getElementById('cfgBankroll');
         const currentBankroll = parseFloat(cfgBankroll.value);
         if (walletUsdcBalance < currentBankroll) {
             cfgBankroll.value = Math.floor(walletUsdcBalance * 100) / 100;
-            // Also adjust max position to be proportional
             const cfgMaxPos = document.getElementById('cfgMaxPosition');
             cfgMaxPos.value = Math.floor(walletUsdcBalance * 0.5 * 100) / 100;
         }
@@ -568,39 +600,93 @@ function onWalletConnected(data) {
     addStreamEntry({
         timestamp: Date.now() / 1000,
         tag: 'WALLET',
-        message: 'Connected: ' + (addr ? addr.slice(0, 10) + '...' : 'OK') +
-            (walletUsdcBalance > 0 ? ' | USDC: $' + walletUsdcBalance.toFixed(2) : ''),
+        message: 'Connected: ' + (addr ? addr.slice(0, 10) + '...' : 'OK'),
     });
+
+    // Fetch multi-chain balances
+    refreshAllBalances();
 }
 
-async function refreshBalance() {
-    setText('wBalance', 'refreshing...');
-    setText('wMatic', 'refreshing...');
-    try {
-        const resp = await fetch('/api/wallet/balance');
-        const data = await resp.json();
-        if (data.status === 'ok') {
-            walletUsdcBalance = data.total_usdc || 0;
-            let usdcStr = '$' + walletUsdcBalance.toFixed(2);
-            if (data.usdce_balance > 0) {
-                usdcStr += ' (USDC: $' + (data.usdc_balance || 0).toFixed(2) + ' + USDC.e: $' + data.usdce_balance.toFixed(2) + ')';
-            }
-            setText('wBalance', usdcStr);
-            setText('wMatic', (data.pol_balance || 0).toFixed(4) + ' POL');
+async function refreshAllBalances() {
+    setText('wHlValue', 'loading...');
+    setText('wHlMargin', 'loading...');
+    setText('wHlPositions', 'loading...');
+    setText('wArbUsdc', 'loading...');
+    setText('wArbEth', 'loading...');
+    setText('wBalance', 'loading...');
+    setText('wMatic', 'loading...');
 
-            // Update header
+    try {
+        const resp = await fetch('/api/balances/all');
+        const data = await resp.json();
+        if (data.status !== 'ok') {
+            setText('wHlValue', 'Error');
+            return;
+        }
+
+        // Hyperliquid
+        const hl = data.hyperliquid || {};
+        if (!hl.error) {
+            setText('wHlValue', '$' + num(hl.account_value || 0));
+            setText('wHlMargin', '$' + num(hl.margin_available || 0) + ' free');
+            setText('wHlPositions', (hl.positions || []).length + ' open');
+
+            // Update header with HL trading balance
+            const hlVal = hl.account_value || 0;
             const addr = document.getElementById('wAddress').textContent;
             if (addr && addr !== '—') {
                 document.getElementById('walletLabel').textContent =
-                    addr.slice(0, 6) + '...' + addr.slice(-4) + ' ($' + walletUsdcBalance.toFixed(2) + ')';
+                    addr.slice(0, 6) + '...' + addr.slice(-4) + (hlVal > 0 ? ' ($' + hlVal.toFixed(0) + ')' : '');
+            }
+            if (hlVal > 0) {
+                walletUsdcBalance = hlVal;
+                const walletMetric = document.getElementById('mWalletMetric');
+                if (walletMetric) walletMetric.style.display = '';
+                setText('mWalletBalance', '$' + num(hlVal));
             }
         } else {
-            setText('wBalance', 'Error: ' + (data.error || 'unknown'));
+            setText('wHlValue', 'Error: ' + hl.error);
         }
+
+        // Arbitrum
+        const arb = data.arbitrum || {};
+        if (!arb.error) {
+            let arbStr = '$' + num(arb.usdc_balance || 0);
+            if (arb.usdce_balance > 0) arbStr += ' (+$' + num(arb.usdce_balance) + ' USDC.e)';
+            setText('wArbUsdc', arbStr);
+            const ethBal = arb.eth_balance || 0;
+            const ethEl = document.getElementById('wArbEth');
+            ethEl.textContent = ethBal.toFixed(6) + ' ETH';
+            ethEl.className = 'status-value ' + (ethBal < 0.0005 ? 'offline' : 'online');
+        } else {
+            setText('wArbUsdc', 'Error');
+        }
+
+        // Polygon (legacy)
+        const poly = data.polygon || {};
+        if (!poly.error) {
+            setText('wBalance', '$' + num(poly.total_usdc || 0));
+            setText('wMatic', (poly.pol_balance || 0).toFixed(4) + ' POL');
+        }
+
+        // Summary stream entry
+        addStreamEntry({
+            timestamp: Date.now() / 1000,
+            tag: 'WALLET',
+            message: 'HL: $' + num(hl.account_value || 0) +
+                     ' | Arb: $' + num(arb.total_usdc || 0) +
+                     ' | Poly: $' + num(poly.total_usdc || 0) +
+                     ' | Total: $' + num(data.total_available_usd || 0),
+        });
+
     } catch (e) {
-        setText('wBalance', 'Fetch failed');
+        setText('wHlValue', 'Fetch failed');
+        console.error('Balance fetch error:', e);
     }
 }
+
+// Keep old name as alias
+async function refreshBalance() { return refreshAllBalances(); }
 
 async function switchToLive() {
     if (!confirm(
@@ -679,4 +765,141 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// ── Bridge Functions ────────────────────────────────────────
+
+async function bridgeCheck() {
+    const amount = parseFloat(document.getElementById('bridgeAmount').value) || 100;
+    const statusEl = document.getElementById('bridgeStatus');
+    statusEl.textContent = 'Checking deposit readiness...';
+
+    try {
+        const resp = await fetch('/api/bridge/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount }),
+        });
+        const data = await resp.json();
+
+        let html = data.ready
+            ? '<span style="color:var(--accent-green)">READY to deposit $' + amount + '</span>'
+            : '<span style="color:var(--accent-red)">NOT READY</span>';
+
+        html += '<br>';
+        (data.checks || []).forEach(c => {
+            const icon = c[1] ? '\u2705' : '\u274C';
+            html += icon + ' ' + escapeHtml(c[0]) + ': ' + escapeHtml(c[2]) + '<br>';
+        });
+
+        if (data.actions_needed && data.actions_needed.length > 0) {
+            html += '<br><strong>Actions needed:</strong><br>';
+            data.actions_needed.forEach(a => {
+                html += '\u2022 ' + escapeHtml(a) + '<br>';
+            });
+        }
+
+        statusEl.innerHTML = html;
+    } catch (e) {
+        statusEl.textContent = 'Check failed: ' + e;
+    }
+}
+
+async function bridgeDeposit() {
+    const amount = parseFloat(document.getElementById('bridgeAmount').value);
+    if (!amount || amount <= 0) {
+        alert('Enter a valid USDC amount');
+        return;
+    }
+    if (!confirm('Deposit $' + amount.toFixed(2) + ' USDC from Arbitrum to Hyperliquid?\n\nThis will execute on-chain transactions.')) {
+        return;
+    }
+
+    const statusEl = document.getElementById('bridgeStatus');
+    statusEl.textContent = 'Depositing... (this may take 1-2 minutes)';
+
+    try {
+        const resp = await fetch('/api/bridge/deposit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span style="color:var(--accent-green)">Deposit sent! tx=' +
+                escapeHtml(data.tx_hash || '').slice(0, 20) + '...</span>' +
+                '<br>Gas: ' + (data.gas_cost_eth || 0).toFixed(6) + ' ETH' +
+                '<br><em>Funds appear on Hyperliquid in 1-5 minutes</em>';
+            addStreamEntry({
+                timestamp: Date.now() / 1000,
+                tag: 'BRIDGE',
+                message: 'Deposited $' + amount + ' to Hyperliquid',
+            });
+            // Refresh balances after short delay
+            setTimeout(refreshAllBalances, 10000);
+        } else {
+            statusEl.innerHTML = '<span style="color:var(--accent-red)">Deposit failed: ' +
+                escapeHtml(data.error || 'Unknown error') + '</span>';
+        }
+    } catch (e) {
+        statusEl.textContent = 'Deposit error: ' + e;
+    }
+}
+
+async function bridgeWithdraw() {
+    const amount = parseFloat(document.getElementById('bridgeAmount').value);
+    if (!amount || amount <= 0) {
+        alert('Enter a valid USDC amount');
+        return;
+    }
+    if (!confirm('Withdraw $' + amount.toFixed(2) + ' from Hyperliquid to Arbitrum?')) {
+        return;
+    }
+
+    const statusEl = document.getElementById('bridgeStatus');
+    statusEl.textContent = 'Withdrawing...';
+
+    try {
+        const resp = await fetch('/api/bridge/withdraw', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount }),
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span style="color:var(--accent-green)">Withdrawal initiated! Funds arrive on Arbitrum in ~10 minutes.</span>';
+            setTimeout(refreshAllBalances, 15000);
+        } else {
+            statusEl.innerHTML = '<span style="color:var(--accent-red)">Withdrawal failed: ' +
+                escapeHtml(data.error || 'Unknown') + '</span>';
+        }
+    } catch (e) {
+        statusEl.textContent = 'Withdrawal error: ' + e;
+    }
+}
+
+async function showBridgeGuide() {
+    const chain = prompt('From which chain? (ethereum, polygon, bsc, base)', 'ethereum');
+    if (!chain) return;
+
+    try {
+        const resp = await fetch('/api/bridge/guide?chain=' + encodeURIComponent(chain));
+        const guide = await resp.json();
+
+        let msg = 'Bridging from ' + (guide.chain || chain) + ' to Arbitrum:\n\n';
+        (guide.methods || []).forEach(m => {
+            msg += '\u2022 ' + m.name + '\n';
+            msg += '  URL: ' + m.url + '\n';
+            msg += '  Time: ' + m.time + '\n';
+            msg += '  Cost: ' + m.cost + '\n';
+            if (m.notes) msg += '  Notes: ' + m.notes + '\n';
+            msg += '\n';
+        });
+        msg += guide.final_step || '';
+        alert(msg);
+    } catch (e) {
+        alert('Failed to load guide: ' + e);
+    }
 }
